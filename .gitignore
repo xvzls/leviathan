@@ -6,3 +6,5 @@ probe2.py
 probe.py
 test_import.py
 vgcore.*
+*/__pychache__/
+*.pyc
