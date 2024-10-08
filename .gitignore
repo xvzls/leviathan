@@ -8,3 +8,4 @@ test_import.py
 vgcore.*
 */__pychache__/
 *.pyc
+*.so
