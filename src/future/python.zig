@@ -74,18 +74,22 @@ fn future_dealloc(self: ?*PythonFutureObject) callconv(.C) void {
         @panic("Invalid Leviathan's object");
     }
     const py_future = self.?;
+    if (py_future.future_obj.result) |v| {
+        python_c.Py_DECREF(@alignCast(@ptrCast(v)));
+    }
     py_future.future_obj.release();
 
     python_c.Py_DECREF(py_future.invalid_state_exc);
     python_c.Py_DECREF(py_future.cancelled_error_exc);
     python_c.Py_DECREF(py_future.asyncio_module);
 
+
     const @"type": *python_c.PyTypeObject = @ptrCast(python_c.Py_TYPE(@ptrCast(self.?)) orelse unreachable);
     @"type".tp_free.?(@ptrCast(self.?));
 }
 
 fn z_future_init(
-    self: *PythonFutureObject, args: PyObject, kwargs: PyObject
+    self: *PythonFutureObject, args: ?PyObject, kwargs: ?PyObject
 ) !c_int {
     var py_loop: PyObject = python_c.Py_None();
     python_c.Py_INCREF(py_loop);
@@ -120,9 +124,9 @@ fn z_future_init(
     if (python_c.PyObject_GetAttrString(py_loop, "_leviathan_asyncio_loop\x00")) |attr| {
         defer python_c.Py_DECREF(attr);
         const leviathan_loop: *Loop.PythonLoopObject = @ptrCast(attr);
-        if (utils.check_leviathan_python_object(leviathan_loop, Loop.LEVIATHAN_LOOP_MAGIC)) {
-            return -1;
-        }
+        // if (utils.check_leviathan_python_object(leviathan_loop, Loop.LEVIATHAN_LOOP_MAGIC)) {
+        //     return -1;
+        // }
 
         self.future_obj.loop = leviathan_loop.loop_obj;
     }else{
@@ -141,7 +145,7 @@ fn future_init(
     if (utils.check_leviathan_python_object(self.?, LEVIATHAN_FUTURE_MAGIC)) {
         return -1;
     }
-    const ret = utils.execute_zig_function(z_future_init, .{self.?, args.?, kwargs.?});
+    const ret = utils.execute_zig_function(z_future_init, .{self.?, args, kwargs});
     return ret;
 }
 
@@ -154,7 +158,7 @@ fn future_result(self: ?*PythonFutureObject, _: ?PyObject) callconv(.C) ?PyObjec
     const obj = instance.future_obj;
     const mutex = &obj.mutex;
     mutex.lock();
-    defer mutex;
+    defer mutex.unlock();
 
     const result: ?PyObject = switch (obj.status) {
         .PENDING => blk: {
@@ -173,7 +177,7 @@ fn future_result(self: ?*PythonFutureObject, _: ?PyObject) callconv(.C) ?PyObjec
 
                 break :blk null;
             }
-            break :blk @ptrCast(obj.result);
+            break :blk @as(?PyObject, @alignCast(@ptrCast(obj.result)));
         },
         .CANCELED => blk: {
             python_c.PyErr_SetRaisedException(instance.cancelled_error_exc);
@@ -185,17 +189,96 @@ fn future_result(self: ?*PythonFutureObject, _: ?PyObject) callconv(.C) ?PyObjec
 }
 
 fn future_set_result(self: ?*PythonFutureObject, args: ?PyObject) callconv(.C) ?PyObject {
+    const instance = self.?;
+    if (utils.check_leviathan_python_object(instance, LEVIATHAN_FUTURE_MAGIC)) {
+        return null;
+    }
 
+    const obj = instance.future_obj;
+    const mutex = &obj.mutex;
+    mutex.lock();
+    defer mutex.unlock();
+
+    switch (obj.status) {
+        .FINISHED,.CANCELED => {
+            python_c.PyErr_SetString(instance.invalid_state_exc, "Result already setted");
+            return null;
+        },
+        else => {}
+    }
+
+    var result: PyObject = undefined;
+    if (python_c.PyArg_ParseTuple(args.?, "O:result\x00", &result) < 0) {
+        return null;
+    }
+    python_c.Py_INCREF(result);
+
+    obj.result = result;
+    obj.status = .FINISHED;
+
+    return python_c.get_py_none();
+}
+
+fn future_done(self: ?*PythonFutureObject, _: ?PyObject) callconv(.C) ?PyObject {
+    const instance = self.?;
+    if (utils.check_leviathan_python_object(instance, LEVIATHAN_FUTURE_MAGIC)) {
+        return null;
+    }
+
+    const obj = instance.future_obj;
+    const mutex = &obj.mutex;
+    mutex.lock();
+    defer mutex.unlock();
+
+    return switch (obj.status) {
+        .FINISHED,.CANCELED => python_c.get_py_true(),
+        else => python_c.get_py_false()
+    };
+}
+
+fn future_cancelled(self: ?*PythonFutureObject, _: ?PyObject) callconv(.C) ?PyObject {
+    const instance = self.?;
+    if (utils.check_leviathan_python_object(instance, LEVIATHAN_FUTURE_MAGIC)) {
+        return null;
+    }
+
+    const obj = instance.future_obj;
+    const mutex = &obj.mutex;
+    mutex.lock();
+    defer mutex.unlock();
+
+    return switch (obj.status) {
+        .CANCELED => python_c.get_py_true(),
+        else => python_c.get_py_false()
+    };
 }
 
 const PythonFutureMethods: []const python_c.PyMethodDef = &[_]python_c.PyMethodDef{
     python_c.PyMethodDef{
         .ml_name = "result\x00",
-        .ml_meth = &future_result,
+        .ml_meth = @ptrCast(&future_result),
         .ml_doc = "Return the result of the Future\x00",
         .ml_flags = python_c.METH_NOARGS
     },
 
+    python_c.PyMethodDef{
+        .ml_name = "set_result\x00",
+        .ml_meth = @ptrCast(&future_set_result),
+        .ml_doc = "Mark the Future as done and set its result.\x00",
+        .ml_flags = python_c.METH_VARARGS
+    },
+    python_c.PyMethodDef{
+        .ml_name = "cancelled\x00",
+        .ml_meth = @ptrCast(&future_cancelled),
+        .ml_doc = "Return True if the Future was cancelled.\x00",
+        .ml_flags = python_c.METH_NOARGS
+    },
+    python_c.PyMethodDef{
+        .ml_name = "done\x00",
+        .ml_meth = @ptrCast(&future_done),
+        .ml_doc = "Return True if the Future is done.\x00",
+        .ml_flags = python_c.METH_NOARGS
+    },
     python_c.PyMethodDef{
         .ml_name = null, .ml_meth = null, .ml_doc = null, .ml_flags = 0
     }
@@ -209,6 +292,7 @@ pub var PythonFutureType = python_c.PyTypeObject{
     .tp_flags = python_c.Py_TPFLAGS_DEFAULT,
     .tp_new = &future_new,
     .tp_init = @ptrCast(&future_init),
-    .tp_dealloc = @ptrCast(&future_dealloc)
+    .tp_dealloc = @ptrCast(&future_dealloc),
+    .tp_methods = @constCast(PythonFutureMethods.ptr)
 };
 
