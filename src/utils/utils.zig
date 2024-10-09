@@ -19,6 +19,16 @@ pub inline fn put_python_runtime_error_message(msg: [:0]const u8) void {
     );
 }
 
+pub inline fn check_leviathan_python_object(object: anytype, magic: u64) bool {
+    if (object.magic != magic) {
+        python_c.PyErr_SetString(
+            python_c.PyExc_TypeError, "Invalid Leviathan's object\x00"
+        );
+        return true;
+    }
+
+    return false;
+}
 
 pub inline fn print_error_traces(
     trace: ?*std.builtin.StackTrace, @"error": anyerror,
@@ -45,7 +55,6 @@ pub inline fn print_error_traces(
     writer.print("\nError name: {s}\n", .{@errorName(@"error")}) catch unreachable;
 }
 
-
 fn get_func_return_type(func: anytype) type {
     const ret_type = @typeInfo(@typeInfo(@TypeOf(func)).Fn.return_type.?).ErrorUnion.payload;
     if (@typeInfo(ret_type) == .Int) {
@@ -53,7 +62,6 @@ fn get_func_return_type(func: anytype) type {
     }
     return ?ret_type;
 }
-
 
 pub inline fn execute_zig_function(func: anytype, args: anytype) get_func_return_type(func) {
     const ret = @call(.auto, func, args);

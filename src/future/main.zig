@@ -1,5 +1,11 @@
 const std = @import("std");
 
+const Loop = @import("../loop/main.zig");
+
+pub const FutureStatus = enum {
+    PENDING, FINISHED, CANCELED
+};
+
 pub const callback_data = struct {
     id: usize,
     data: ?*anyopaque
@@ -9,21 +15,22 @@ pub const future_callbacks_array = std.ArrayList(*fn (allocator: std.mem.Allocat
 const future_callbacks_data_array = std.ArrayList(?*callback_data);
 
 allocator: std.mem.Allocator,
-must_cancel: bool = false,
 result: ?*anyopaque = null,
-exception: ?*anyopaque = null,
-is_done: bool = false,
-cancelled: bool = false,
+status: FutureStatus = .PENDING,
 
-pending_futures_to_be_executed: usize = 0,
+mutex: std.Thread.Mutex,
+
 callbacks: future_callbacks_array,
 callbacks_data: future_callbacks_data_array,
+
+loop: ?*Loop = null,
 
 
 pub fn init(allocator: std.mem.Allocator) !*Future {
     const fut = try allocator.create(Future);
     fut.* = .{
         .allocator = allocator,
+        .mutex = std.Thread.Mutex{},
         .callbacks = future_callbacks_array.init(allocator),
         .callbacks_data = future_callbacks_data_array.init(allocator)
     };
