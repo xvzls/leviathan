@@ -41,7 +41,7 @@ pub fn release(self: *const Future) void {
     self.allocator.destroy(self);
 }
 
-pub usingnamespace @import("python.zig");
+pub usingnamespace @import("python/main.zig");
 
 
 const Future = @This();

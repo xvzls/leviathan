@@ -92,6 +92,7 @@ pub fn pop_node(self: *wLinkedList) !Node {
         self.first = null;
         self.last = null;
     }
+    self.len -= 1;
 
     return last_node;
 }
@@ -100,7 +101,6 @@ pub fn pop(self: *wLinkedList) !?*anyopaque {
     const last_node = try self.pop_node();
     const data = last_node.data;
     self.allocator.destroy(last_node);
-    self.len -= 1;
     return data;
 }
 
@@ -115,6 +115,7 @@ pub fn popleft_node(self: *wLinkedList) !Node {
         self.first = null;
         self.last = null;
     }
+    self.len -= 1;
     return first_node;
 }
 
@@ -123,7 +124,6 @@ pub fn popleft(self: *wLinkedList) !?*anyopaque {
 
     const data = first_node.data;
     self.allocator.destroy(first_node);
-    self.len -= 1;
     return data;
 }
 

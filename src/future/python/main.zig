@@ -1,0 +1,54 @@
+const python_c = @import("../../utils/python_c.zig");
+const constructors = @import("constructors.zig");
+const result = @import("result.zig");
+const cancel = @import("cancel.zig");
+
+const PythonFutureMethods: []const python_c.PyMethodDef = &[_]python_c.PyMethodDef{
+    python_c.PyMethodDef{
+        .ml_name = "result\x00",
+        .ml_meth = @ptrCast(&result.future_result),
+        .ml_doc = "Return the result of the Future\x00",
+        .ml_flags = python_c.METH_NOARGS
+    },
+
+    python_c.PyMethodDef{
+        .ml_name = "set_result\x00",
+        .ml_meth = @ptrCast(&result.future_set_result),
+        .ml_doc = "Mark the Future as done and set its result.\x00",
+        .ml_flags = python_c.METH_VARARGS
+    },
+    python_c.PyMethodDef{
+        .ml_name = "cancel\x00",
+        .ml_meth = @ptrCast(&cancel.future_cancel),
+        .ml_doc = "Cancel the Future and schedule callbacks.\x00",
+        .ml_flags = python_c.METH_VARARGS
+    },
+    python_c.PyMethodDef{
+        .ml_name = "cancelled\x00",
+        .ml_meth = @ptrCast(&cancel.future_cancelled),
+        .ml_doc = "Return True if the Future was cancelled.\x00",
+        .ml_flags = python_c.METH_NOARGS
+    },
+    python_c.PyMethodDef{
+        .ml_name = "done\x00",
+        .ml_meth = @ptrCast(&result.future_done),
+        .ml_doc = "Return True if the Future is done.\x00",
+        .ml_flags = python_c.METH_NOARGS
+    },
+    python_c.PyMethodDef{
+        .ml_name = null, .ml_meth = null, .ml_doc = null, .ml_flags = 0
+    }
+};
+
+pub var PythonFutureType = python_c.PyTypeObject{
+    .tp_name = "leviathan.Future\x00",
+    .tp_doc = "Leviathan's future class\x00",
+    .tp_basicsize = @sizeOf(constructors.PythonFutureObject),
+    .tp_itemsize = 0,
+    .tp_flags = python_c.Py_TPFLAGS_DEFAULT | python_c.Py_TPFLAGS_BASETYPE,
+    .tp_new = &constructors.future_new,
+    .tp_init = @ptrCast(&constructors.future_init),
+    .tp_dealloc = @ptrCast(&constructors.future_dealloc),
+    .tp_methods = @constCast(PythonFutureMethods.ptr)
+};
+
