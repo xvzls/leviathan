@@ -60,7 +60,7 @@ pub fn future_set_result(self: ?*PythonFutureObject, args: ?PyObject) callconv(.
 
     switch (obj.status) {
         .FINISHED,.CANCELED => {
-            python_c.PyErr_SetString(instance.invalid_state_exc, "Result already setted");
+            python_c.PyErr_SetString(instance.invalid_state_exc, "Result already setted\x00");
             return null;
         },
         else => {}
@@ -70,9 +70,8 @@ pub fn future_set_result(self: ?*PythonFutureObject, args: ?PyObject) callconv(.
     if (python_c.PyArg_ParseTuple(args.?, "O:result\x00", &result) < 0) {
         return null;
     }
-    python_c.Py_INCREF(result);
 
-    obj.result = result;
+    obj.result = python_c.Py_NewRef(result).?;
     obj.status = .FINISHED;
 
     return python_c.get_py_none();

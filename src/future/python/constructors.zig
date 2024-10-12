@@ -85,16 +85,9 @@ pub fn future_dealloc(self: ?*PythonFutureObject) callconv(.C) void {
     }
     py_future.future_obj.release();
 
-    if (py_future.exception) |exc| {
-        python_c.Py_DECREF(exc);
-    }
-    if (py_future.exception_tb) |exc_tb| {
-        python_c.Py_DECREF(exc_tb);
-    }
-
-    if (py_future.cancel_msg_py_object) |obj| {
-        python_c.Py_DECREF(obj);
-    }
+    python_c.Py_XDECREF(py_future.exception);
+    python_c.Py_XDECREF(py_future.exception_tb);
+    python_c.Py_XDECREF(py_future.cancel_msg_py_object);
 
     python_c.Py_DECREF(py_future.invalid_state_exc);
     python_c.Py_DECREF(py_future.cancelled_error_exc);
@@ -109,9 +102,8 @@ pub fn future_dealloc(self: ?*PythonFutureObject) callconv(.C) void {
 inline fn z_future_init(
     self: *PythonFutureObject, args: ?PyObject, kwargs: ?PyObject
 ) !c_int {
-    var py_loop: PyObject = python_c.Py_None();
-    python_c.Py_INCREF(py_loop);
-    errdefer python_c.Py_DECREF(py_loop);
+    var py_loop: ?PyObject = null;
+    errdefer python_c.Py_XDECREF(py_loop);
 
     var loop_args_name: [5]u8 = undefined;
     @memcpy(&loop_args_name, "loop\x00");
@@ -123,32 +115,17 @@ inline fn z_future_init(
         return error.PythonError;
     }
 
-    if (py_loop == python_c.Py_None()) {
-        const get_running_loop_func: PyObject = python_c.PyObject_GetAttrString(
-            self.asyncio_module, "get_running_loop\x00"
-        ) orelse return error.PythonError;
-        defer python_c.Py_DECREF(get_running_loop_func);
-
-        if (python_c.PyCallable_Check(get_running_loop_func) < 0) {
-            utils.put_python_runtime_error_message("Error getting 'get_running_loop' function");
-            return error.PythonError;
-        }
-
-        const py_none_loop = py_loop;
-        py_loop = python_c.PyObject_CallNoArgs(get_running_loop_func)
-            orelse return error.PythonError;
-        python_c.Py_DECREF(py_none_loop);
-    }else{
-        python_c.Py_INCREF(py_loop);
+    if (py_loop) |_py_loop| {
+        python_c.Py_INCREF(_py_loop);
     }
 
-    const leviathan_loop: *Loop.constructors.PythonLoopObject = @ptrCast(py_loop);
+    const leviathan_loop: *Loop.constructors.PythonLoopObject = @ptrCast(py_loop.?);
     if (utils.check_leviathan_python_object(leviathan_loop, Loop.constructors.LEVIATHAN_LOOP_MAGIC)) {
         utils.put_python_runtime_error_message("Invalid asyncio event loop. Only Leviathan's event loops are allowed\x00");
         return error.PythonError;
     }
     self.future_obj.loop = leviathan_loop.loop_obj;
-    self.py_loop = py_loop;
+    self.py_loop = py_loop.?;
 
     return 0;
 }
