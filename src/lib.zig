@@ -6,6 +6,7 @@ const utils = @import("utils/utils.zig");
 
 const future = @import("future/main.zig");
 const loop = @import("loop/main.zig");
+const handle = @import("handle/main.zig");
 
 
 // fn testing_function(self: ?*python_c.PyObject, args: ?*python_c.PyObject) callconv(.C) ?*python_c.PyObject {
@@ -43,23 +44,30 @@ var leviathan_module = python_c.PyModuleDef{
 };
 
 inline fn initialize_leviathan_types() !void {
-    if (python_c.PyType_Ready(&future.PythonFutureType) < 0) {
-        return error.PythonError;
+    const types_to_initialize = .{
+        &future.PythonFutureType,
+        &loop.PythonLoopType,
+        &handle.PythonHandleType
+    };
+
+    inline for (types_to_initialize) |v| {
+        if (python_c.PyType_Ready(v) < 0) {
+            return error.PythonError;
+        }
+
+        python_c.Py_INCREF(@ptrCast(v));
     }
-
-    python_c.Py_INCREF(@ptrCast(&future.PythonFutureType));
-    errdefer python_c.Py_DECREF(@ptrCast(&future.PythonFutureType));
-
-    if (python_c.PyType_Ready(&loop.PythonLoopType) < 0) {
-        return error.PythonError;
-    }
-
-    python_c.Py_INCREF(@ptrCast(&loop.PythonLoopType));
 }
 
 inline fn deinitialize_leviathan_types() void {
-    python_c.Py_DECREF(@ptrCast(&future.PythonFutureType));
-    python_c.Py_DECREF(@ptrCast(&loop.PythonLoopType));
+    const types_to_release = .{
+        &future.PythonFutureType,
+        &loop.PythonLoopType,
+        &handle.PythonHandleType
+    };
+    inline for (types_to_release) |v| {
+        python_c.Py_DECREF(@ptrCast(v));
+    }
 }
 
 inline fn initialize_python_module() !*python_c.PyObject {
@@ -71,6 +79,7 @@ inline fn initialize_python_module() !*python_c.PyObject {
     const leviathan_modules = .{
         .{"Future\x00", &future.PythonFutureType},
         .{"Loop\x00", &loop.PythonLoopType},
+        .{"Handle\x00", &handle.PythonHandleType},
     };
 
     inline for (leviathan_modules) |v| {

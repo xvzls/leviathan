@@ -1,6 +1,8 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 const Loop = @import("../loop/main.zig");
+const NoOpMutex = @import("../utils/no_op_mutex.zig");
 
 pub const FutureStatus = enum {
     PENDING, FINISHED, CANCELED
@@ -26,11 +28,21 @@ callbacks_data: future_callbacks_data_array,
 loop: ?*Loop = null,
 
 
-pub fn init(allocator: std.mem.Allocator) !*Future {
+pub fn init(allocator: std.mem.Allocator, thread_safe: bool) !*Future {
+    const mutex = blk: {
+        if (thread_safe or builtin.mode == .Debug) {
+            break :blk std.Thread.Mutex{};
+        } else {
+            break :blk std.Thread.Mutex{
+                .impl = NoOpMutex{},
+            };
+        }
+    };
+
     const fut = try allocator.create(Future);
     fut.* = .{
         .allocator = allocator,
-        .mutex = std.Thread.Mutex{},
+        .mutex = mutex,
         .callbacks = future_callbacks_array.init(allocator),
         .callbacks_data = future_callbacks_data_array.init(allocator)
     };

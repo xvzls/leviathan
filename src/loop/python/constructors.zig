@@ -54,19 +54,31 @@ pub fn loop_dealloc(self: ?*PythonLoopObject) callconv(.C) void {
 inline fn z_loop_init(
     self: *PythonLoopObject, args: ?PyObject, kwargs: ?PyObject
 ) !c_int {
-    var loop_args_name: [11]u8 = undefined;
-    @memcpy(&loop_args_name, "io_workers\x00");
-    var kwlist: [2][*c]u8 = undefined;
-    kwlist[0] = @ptrCast(&loop_args_name[0]);
-    kwlist[1] = null;
+    // var loop_args_name: [11]u8 = undefined;
+    // @memcpy(&loop_args_name, "io_workers\x00");
+    var kwlist: [5][*c]u8 = undefined;
+    kwlist[0] = @constCast("max_bytes_capacity_for_handles\x00");
+    kwlist[1] = @constCast("min_bytes_capacity_for_handles\x00");
+    kwlist[2] = @constCast("ready_tasks_queue_min_bytes_capacity\x00");
+    kwlist[3] = @constCast("thread_safe\x00");
+    kwlist[4] = null;
 
-    var io_workers: u64 = 0;
+    var max_bytes_capacity_for_handles: u64 = 0;
+    var min_bytes_capacity_for_handles: u64 = 0;
+    var ready_tasks_queue_min_bytes_capacity: u64 = 0;
+    var thread_safe: u8 = 0;
 
-    if (python_c.PyArg_ParseTupleAndKeywords(args, kwargs, "|l", @ptrCast(&kwlist), &io_workers) < 0) {
+    if (python_c.PyArg_ParseTupleAndKeywords(
+            args, kwargs, "BKKK", @ptrCast(&kwlist), &max_bytes_capacity_for_handles, &min_bytes_capacity_for_handles,
+            &ready_tasks_queue_min_bytes_capacity, &thread_safe
+    ) < 0) {
         return error.PythonError;
     }
 
-    self.loop_obj = try Loop.init(allocator, io_workers);
+    self.loop_obj = try Loop.init(
+        allocator, (thread_safe != 0), @intCast(max_bytes_capacity_for_handles), @intCast(min_bytes_capacity_for_handles),
+        @intCast(ready_tasks_queue_min_bytes_capacity)
+    );
 
     return 0;
 }
