@@ -29,11 +29,6 @@ pub const HandlesArenaAllocatorConfig = struct {
 
 allocator: std.mem.Allocator,
 
-handles_arena_allocators: [2]HandlesArenaAllocatorConfig,
-handles_arena_allocator_to_use: u8,
-max_bytes_capacity_for_handles: usize,
-min_bytes_capacity_for_handles: usize,
-
 ready_tasks_arena_allocators: [2]std.heap.ArenaAllocator,
 ready_tasks_queues: [2]LinkedList,
 ready_tasks_queue_to_use: u8,
@@ -43,10 +38,7 @@ delayed_tasks: DeleyedQueue,
 mutex: std.Thread.Mutex,
 
 
-pub fn init(
-    allocator: std.mem.Allocator, thread_safe: bool, h_max_capacity: usize,
-    h_min_capacity: usize, rtq_min_capacity: usize
-) !*Loop {
+pub fn init(allocator: std.mem.Allocator, thread_safe: bool, rtq_min_capacity: usize) !*Loop {
     const loop = try allocator.create(Loop);
     errdefer allocator.destroy(loop);
 
@@ -60,18 +52,6 @@ pub fn init(
             };
         }
     };
-
-    loop.handles_arena_allocators[0] = .{};
-    loop.handles_arena_allocators[0].arena_allocator = std.heap.ArenaAllocator.init(allocator);
-    loop.handles_arena_allocators[0].allocator = loop.handles_arena_allocators[0].arena_allocator.allocator();
-
-    loop.handles_arena_allocators[1] = .{};
-    loop.handles_arena_allocators[1].arena_allocator = std.heap.ArenaAllocator.init(allocator);
-    loop.handles_arena_allocators[1].allocator = loop.handles_arena_allocators[1].arena_allocator.allocator();
-
-    loop.handles_arena_allocator_to_use = 0;
-    loop.max_bytes_capacity_for_handles = h_max_capacity;
-    loop.min_bytes_capacity_for_handles = h_min_capacity;
 
     loop.ready_tasks_arena_allocators[0] = std.heap.ArenaAllocator.init(allocator);
     loop.ready_tasks_arena_allocators[1] = std.heap.ArenaAllocator.init(allocator);
@@ -87,44 +67,6 @@ pub fn init(
     };
 
     return loop;
-}
-
-pub inline fn alloc_handle_data(
-    self: *Loop, comptime item_size: usize, index: ?*u8
-) std.mem.Allocator {
-    var handles_arena_allocator_to_use = self.handles_arena_allocator_to_use;
-
-    var handles_arena_allocator: *HandlesArenaAllocatorConfig = &self.handles_arena_allocators[handles_arena_allocator_to_use];
-    if (handles_arena_allocator.max_bytes_allocated > self.max_bytes_capacity_for_handles) {
-        handles_arena_allocator.must_be_freed = true;
-        handles_arena_allocator_to_use = (handles_arena_allocator_to_use + 1) % 2;
-        handles_arena_allocator = &self.handles_arena_allocators[handles_arena_allocator_to_use];
-        self.handles_arena_allocator_to_use = handles_arena_allocator_to_use;
-    }
-
-    const handles_allocated = handles_arena_allocator.bytes_allocated + item_size;
-    handles_arena_allocator.max_bytes_allocated = @max(handles_arena_allocator.max_bytes_allocated, handles_allocated);
-    handles_arena_allocator.bytes_allocated = handles_allocated;
-
-    if (index) |ptr| {
-        ptr.* = handles_arena_allocator_to_use;
-    }
-
-    return handles_arena_allocator.allocator;
-}
-
-pub inline fn free_handle_data(self: *Loop, item_size: usize, index: u8) void {
-    const handles_arena_allocator: *HandlesArenaAllocatorConfig = &self.handles_arena_allocators[index];
-    handles_arena_allocator.bytes_allocated -= item_size;
-    if (handles_arena_allocator.must_be_freed and handles_arena_allocator.bytes_allocated == 0) {
-        const preheated = handles_arena_allocator.arena_allocator.reset(
-            .{ .retain_with_limit = self.min_bytes_capacity_for_handles }
-        );
-        if (!preheated) {
-            _ = handles_arena_allocator.arena_allocator.reset(.free_all);
-        }
-        handles_arena_allocator.must_be_freed = false;
-    }
 }
 
 pub fn release(loop: *Loop) void {

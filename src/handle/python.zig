@@ -12,7 +12,7 @@ pub const LEVIATHAN_HANDLE_MAGIC = 0x48414E444C450001;
 pub const PythonHandleObject = extern struct {
     ob_base: python_c.PyObject,
     magic: u64,
-    handle_obj: ?*Handle,
+    handle_obj: ?Handle,
 
     exception_handler: ?PyObject,
 
@@ -24,6 +24,7 @@ pub const PythonHandleObject = extern struct {
 
 fn callback_for_python_methods(data: ?*anyopaque) bool {
     const py_handle: *PythonHandleObject = @alignCast(@ptrCast(data.?));
+    defer python_c.Py_DECREF(py_handle);
 
     const ret: ?PyObject = python_c.PyObject_CallObject(py_handle.py_callback.?, py_handle.args.?);
     if (ret) |value| {
@@ -128,9 +129,9 @@ inline fn z_handle_init(
     const py_args: PyObject = python_c.Py_BuildValue("OO\x00", py_callback.?, py_callback_args.?)
         orelse return error.PythonError;
 
-    const handle_obj = try Handle.init(leviathan_loop.loop_obj.?, &callback_for_python_methods, @TypeOf(null), (thread_safe != 0));
-    handle_obj.data = self;
-    self.handle_obj = handle_obj;
+    self.handle_obj = Handle.init(
+        leviathan_loop.loop_obj.?, &callback_for_python_methods, self, (thread_safe != 0)
+    );
     
     self.exception_handler = python_c.Py_NewRef(exception_handler.?).?;
     self.py_callback = python_c.Py_NewRef(contextvars_run_func).?;
@@ -162,7 +163,7 @@ fn handle_cancel(self: ?*PythonHandleObject, _: ?PyObject) callconv(.C) ?PyObjec
         return null;
     }
 
-    const handle_obj = self.?.handle_obj.?;
+    const handle_obj = &self.?.handle_obj.?;
     const mutex = &handle_obj.mutex;
     mutex.lock();
     defer mutex.unlock();
@@ -177,7 +178,7 @@ fn handle_cancelled(self: ?*PythonHandleObject, _: ?PyObject) callconv(.C) ?PyOb
         return null;
     }
 
-    const handle_obj = self.?.handle_obj.?;
+    const handle_obj = &self.?.handle_obj.?;
     const mutex = &handle_obj.mutex;
     mutex.lock();
     defer mutex.unlock();

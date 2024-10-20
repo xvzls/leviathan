@@ -2,6 +2,7 @@ const python_c = @import("../../utils/python_c.zig");
 const constructors = @import("constructors.zig");
 const result = @import("result.zig");
 const cancel = @import("cancel.zig");
+const callbacks = @import("callbacks.zig");
 
 const PythonFutureMethods: []const python_c.PyMethodDef = &[_]python_c.PyMethodDef{
     python_c.PyMethodDef{
@@ -10,7 +11,6 @@ const PythonFutureMethods: []const python_c.PyMethodDef = &[_]python_c.PyMethodD
         .ml_doc = "Return the result of the Future\x00",
         .ml_flags = python_c.METH_NOARGS
     },
-
     python_c.PyMethodDef{
         .ml_name = "set_result\x00",
         .ml_meth = @ptrCast(&result.future_set_result),
@@ -33,6 +33,18 @@ const PythonFutureMethods: []const python_c.PyMethodDef = &[_]python_c.PyMethodD
         .ml_name = "done\x00",
         .ml_meth = @ptrCast(&result.future_done),
         .ml_doc = "Return True if the Future is done.\x00",
+        .ml_flags = python_c.METH_NOARGS
+    },
+    python_c.PyMethodDef{
+        .ml_name = "add_done_callback\x00",
+        .ml_meth = @ptrCast(&callbacks.future_add_done_callback),
+        .ml_doc = "Add a callback to be run when the Future is done.\x00",
+        .ml_flags = python_c.METH_NOARGS
+    },
+    python_c.PyMethodDef{
+        .ml_name = "remove_done_callback\x00",
+        .ml_meth = @ptrCast(&callbacks.future_remove_done_callback),
+        .ml_doc = "Remove callback from the callbacks list.\x00",
         .ml_flags = python_c.METH_NOARGS
     },
     python_c.PyMethodDef{

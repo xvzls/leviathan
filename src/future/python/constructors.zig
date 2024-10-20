@@ -14,7 +14,7 @@ pub const LEVIATHAN_FUTURE_MAGIC = 0x4655545552554552;
 pub const PythonFutureObject = extern struct {
     ob_base: python_c.PyObject,
     magic: u64,
-    future_obj: ?*Future,
+    future_obj: ?Future,
 
     asyncio_module: PyObject,
     invalid_state_exc: PyObject,
@@ -36,7 +36,6 @@ inline fn z_future_new(
     errdefer @"type".tp_free.?(instance);
 
     instance.magic = LEVIATHAN_FUTURE_MAGIC;
-
 
     const asyncio_module: PyObject = python_c.PyImport_ImportModule("asyncio\x00")
         orelse return error.PythonError;
@@ -77,10 +76,7 @@ pub fn future_dealloc(self: ?*PythonFutureObject) callconv(.C) void {
         @panic("Invalid Leviathan's object");
     }
     const py_future = self.?;
-    if (py_future.future_obj) |future| {
-        if (future.result) |v| {
-            python_c.Py_DECREF(@alignCast(@ptrCast(v)));
-        }
+    if (py_future.future_obj) |*future| {
         future.release();
     }
 
@@ -122,12 +118,8 @@ inline fn z_future_init(
         return error.PythonError;
     }
 
-    const zig_future_obj = try Future.init(allocator, (thread_safe != 0));
-    self.future_obj = zig_future_obj;
-
+    self.future_obj.?.init(allocator, (thread_safe != 0), leviathan_loop.loop_obj.?);
     python_c.Py_INCREF(@ptrCast(leviathan_loop));
-
-    zig_future_obj.loop = leviathan_loop.loop_obj;
     self.py_loop = leviathan_loop;
 
     return 0;

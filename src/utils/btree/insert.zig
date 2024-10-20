@@ -11,7 +11,7 @@ inline fn insert_in_empty_node(node: *Node, key: u64, value: *anyopaque) void {
     node.nkeys = 1;
 }
 
-fn do_insertion(node: *Node, key: u64, value: *anyopaque, new_child: ?*Node) void {
+pub fn do_insertion(node: *Node, key: u64, value: *anyopaque, new_child: ?*Node) void {
     if (new_child) |ch| {
         ch.parent = node;
     }
@@ -92,7 +92,7 @@ inline fn split_node(
     do_insertion(parent, keys[1], values[1], new_child);
 }
 
-fn split_nodes(allocator: std.mem.Allocator, node: *Node) void {
+pub fn split_nodes(allocator: std.mem.Allocator, node: *Node) void {
     var current_node = node;
     while (current_node.nkeys == 3) {
         const keys = &current_node.keys;
@@ -117,6 +117,11 @@ fn split_nodes(allocator: std.mem.Allocator, node: *Node) void {
     }
 }
 
+pub inline fn insert_in_node(allocator: std.mem.Allocator, node: *Node, key: u64, value: *anyopaque) void {
+    do_insertion(node, key, value, null);
+    split_nodes(allocator, node);
+}
+
 pub fn insert(self: *BTree, key: u64, value: *anyopaque) bool {
     const allocator = self.allocator;
 
@@ -128,8 +133,7 @@ pub fn insert(self: *BTree, key: u64, value: *anyopaque) bool {
         }
     }
 
-    do_insertion(node, key, value, null);
-    split_nodes(allocator, node);
+    insert_in_node(allocator, node, key, value);
 
     return true;
 }
