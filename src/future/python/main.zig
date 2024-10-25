@@ -1,5 +1,5 @@
 const python_c = @import("../../utils/python_c.zig");
-const constructors = @import("constructors.zig");
+pub const constructors = @import("constructors.zig");
 const result = @import("result.zig");
 const cancel = @import("cancel.zig");
 const callbacks = @import("callbacks.zig");

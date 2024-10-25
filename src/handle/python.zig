@@ -130,7 +130,7 @@ inline fn z_handle_init(
         orelse return error.PythonError;
 
     self.handle_obj = Handle.init(
-        leviathan_loop.loop_obj.?, &callback_for_python_methods, self, (thread_safe != 0)
+        &leviathan_loop.loop_obj.?, &callback_for_python_methods, self, (thread_safe != 0)
     );
     
     self.exception_handler = python_c.Py_NewRef(exception_handler.?).?;

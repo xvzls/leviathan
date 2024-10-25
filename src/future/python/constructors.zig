@@ -98,8 +98,6 @@ pub fn future_dealloc(self: ?*PythonFutureObject) callconv(.C) void {
 inline fn z_future_init(
     self: *PythonFutureObject, args: ?PyObject, kwargs: ?PyObject
 ) !c_int {
-    // var loop_args_name: [5]u8 = undefined;
-    // @memcpy(&loop_args_name, "loop\x00");
     var kwlist: [3][*c]u8 = undefined;
     kwlist[0] = @constCast("loop\x00");
     kwlist[1] = @constCast("thread_safe\x00");
@@ -118,7 +116,9 @@ inline fn z_future_init(
         return error.PythonError;
     }
 
-    self.future_obj.?.init(allocator, (thread_safe != 0), leviathan_loop.loop_obj.?);
+    const future_obj = &self.future_obj;
+    future_obj.* = undefined;
+    try future_obj.*.?.init(allocator, (thread_safe != 0), &leviathan_loop.loop_obj.?);
     python_c.Py_INCREF(@ptrCast(leviathan_loop));
     self.py_loop = leviathan_loop;
 

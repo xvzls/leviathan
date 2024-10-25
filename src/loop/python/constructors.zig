@@ -11,7 +11,11 @@ pub const LEVIATHAN_LOOP_MAGIC = 0x4C4F4F5000000001;
 pub const PythonLoopObject = extern struct {
     ob_base: python_c.PyObject,
     magic: u64,
-    loop_obj: ?*Loop
+    loop_obj: ?Loop,
+
+    running: bool,
+    stopping: bool,
+    closed: bool,
 };
 
 inline fn z_loop_new(
@@ -22,7 +26,10 @@ inline fn z_loop_new(
     errdefer @"type".tp_free.?(instance);
 
     instance.magic = LEVIATHAN_LOOP_MAGIC;
-    instance.loop_obj = null;
+
+    instance.running = false;
+    instance.stopping = false;
+    instance.closed = false;
 
     return instance;
 }
@@ -43,7 +50,15 @@ pub fn loop_dealloc(self: ?*PythonLoopObject) callconv(.C) void {
     }
     const py_loop = self.?;
 
-    if (py_loop.loop_obj) |loop| {
+    if (py_loop.loop_obj) |*loop| {
+        if (!loop.closed) {
+            @panic("Loop is not closed, can't be deallocated");
+        }
+
+        if (loop.running) {
+            @panic("Loop is running, can't be deallocated");
+        }
+
         loop.release();
     }
 
@@ -68,7 +83,9 @@ inline fn z_loop_init(
         return error.PythonError;
     }
 
-    self.loop_obj = try Loop.init(allocator, (thread_safe != 0), @intCast(ready_tasks_queue_min_bytes_capacity));
+    const loop_obj = &self.loop_obj;
+    loop_obj.* = undefined;
+    try loop_obj.*.?.init(allocator, (thread_safe != 0), @intCast(ready_tasks_queue_min_bytes_capacity));
     return 0;
 }
 
