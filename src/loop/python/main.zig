@@ -6,6 +6,12 @@ const scheduling = @import("scheduling.zig");
 
 const PythonFutureMethods: []const python_c.PyMethodDef = &[_]python_c.PyMethodDef{
     python_c.PyMethodDef{
+        .ml_name = "run_forever\x00",
+        .ml_meth = @ptrCast(&control.loop_run_forever),
+        .ml_doc = "Run the event loop forever.\x00",
+        .ml_flags = python_c.METH_NOARGS
+    },
+    python_c.PyMethodDef{
         .ml_name = "stop\x00",
         .ml_meth = @ptrCast(&control.loop_stop),
         .ml_doc = "Stop the event loop.\x00",

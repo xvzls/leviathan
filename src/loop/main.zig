@@ -35,8 +35,11 @@ running: bool = false,
 stopping: bool = false,
 closed: bool = false,
 
-pub fn init(self: *Loop, allocator: std.mem.Allocator, thread_safe: bool, rtq_min_capacity: usize) !void {
-    self.* = .{
+pub fn init(allocator: std.mem.Allocator, thread_safe: bool, rtq_min_capacity: usize) !*Loop {
+    const loop = try allocator.create(Loop);
+    errdefer allocator.destroy(loop);
+
+    loop.* = .{
         .allocator = allocator,
         .thread_safe = thread_safe,
         .mutex = blk: {
@@ -54,23 +57,21 @@ pub fn init(self: *Loop, allocator: std.mem.Allocator, thread_safe: bool, rtq_mi
         }
     };
 
-    self.ready_tasks_arenas[0] = std.heap.ArenaAllocator.init(allocator);
-    self.ready_tasks_arenas[1] = std.heap.ArenaAllocator.init(allocator);
+    loop.ready_tasks_arenas[0] = std.heap.ArenaAllocator.init(allocator);
+    loop.ready_tasks_arenas[1] = std.heap.ArenaAllocator.init(allocator);
 
-    self.ready_tasks_arena_allocators[0] = self.ready_tasks_arenas[0].allocator();
-    self.ready_tasks_arena_allocators[1] = self.ready_tasks_arenas[1].allocator();
+    loop.ready_tasks_arena_allocators[0] = loop.ready_tasks_arenas[0].allocator();
+    loop.ready_tasks_arena_allocators[1] = loop.ready_tasks_arenas[1].allocator();
 
-    self.ready_tasks_queues[0] = LinkedList.init(self.ready_tasks_arena_allocators[0]);
-    self.ready_tasks_queues[1] = LinkedList.init(self.ready_tasks_arena_allocators[1]);
+    loop.ready_tasks_queues[0] = LinkedList.init(loop.ready_tasks_arena_allocators[0]);
+    loop.ready_tasks_queues[1] = LinkedList.init(loop.ready_tasks_arena_allocators[1]);
+
+    return loop;
 }
 
 pub fn release(loop: *Loop) void {
-    inline for (&loop.handles_arena_allocators) |*handles_arena_allocator| {
-        handles_arena_allocator.arena_allocator.deinit();
-    }
-
-    inline for (&loop.ready_tasks_arena_allocators) |*ready_tasks_arena_allocator| {
-        ready_tasks_arena_allocator.deinit();
+    inline for (&loop.ready_tasks_arenas) |*ready_tasks_arena| {
+        ready_tasks_arena.deinit();
     }
 
     const delayed_tasks_btree = loop.delayed_tasks.btree;

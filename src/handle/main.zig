@@ -12,10 +12,14 @@ callback: *const fn (?*anyopaque) bool,
 data: ?*anyopaque,
 loop: *Loop,
 
+py_handle: ?*Handle.PythonHandleObject,
+
 pub fn init(
-    loop: *Loop, allocator: std.mem.Allocator, callback: *const fn (?*anyopaque) bool, data: ?*anyopaque,
-    thread_safe: bool
-) Handle {
+    allocator: std.mem.Allocator, py_handle: ?*Handle.PythonHandleObject, loop: *Loop,
+    callback: *const fn (?*anyopaque) bool, data: ?*anyopaque, thread_safe: bool
+) !*Handle {
+    const handle = try allocator.create(Handle);
+
     const mutex = blk: {
         if (thread_safe or builtin.mode == .Debug) {
             break :blk std.Thread.Mutex{};
@@ -25,14 +29,17 @@ pub fn init(
             };
         }
     };
-    return .{
+    handle.* = .{
         .allocator = allocator,
         .mutex = mutex,
         .cancelled = false,
         .callback = callback,
         .data = data,
         .loop = loop,
+        .py_handle = py_handle
     };
+
+    return handle;
 }
 
 pub inline fn run_callback(self: *Handle) bool {

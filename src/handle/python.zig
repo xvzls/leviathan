@@ -12,7 +12,7 @@ pub const LEVIATHAN_HANDLE_MAGIC = 0x48414E444C450001;
 pub const PythonHandleObject = extern struct {
     ob_base: python_c.PyObject,
     magic: u64,
-    handle_obj: ?Handle,
+    handle_obj: ?*Handle,
 
     exception_handler: ?PyObject,
 
@@ -24,7 +24,7 @@ pub const PythonHandleObject = extern struct {
 
 fn callback_for_python_methods(data: ?*anyopaque) bool {
     const py_handle: *PythonHandleObject = @alignCast(@ptrCast(data.?));
-    defer python_c.Py_DECREF(py_handle);
+    defer python_c.Py_DECREF(@ptrCast(py_handle));
 
     const ret: ?PyObject = python_c.PyObject_CallObject(py_handle.py_callback.?, py_handle.args.?);
     if (ret) |value| {
@@ -56,6 +56,7 @@ inline fn z_handle_new(
     errdefer @"type".tp_free.?(instance);
 
     instance.magic = LEVIATHAN_HANDLE_MAGIC;
+    instance.handle_obj = null;
 
     return instance;
 }
@@ -129,8 +130,8 @@ inline fn z_handle_init(
     const py_args: PyObject = python_c.Py_BuildValue("OO\x00", py_callback.?, py_callback_args.?)
         orelse return error.PythonError;
 
-    self.handle_obj = Handle.init(
-        &leviathan_loop.loop_obj.?, &callback_for_python_methods, self, (thread_safe != 0)
+    self.handle_obj = try Handle.init(
+        allocator, self, leviathan_loop.loop_obj.?, &callback_for_python_methods, self, (thread_safe != 0)
     );
     
     self.exception_handler = python_c.Py_NewRef(exception_handler.?).?;

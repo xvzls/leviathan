@@ -32,7 +32,7 @@ fn z_loop_call_soon(self: *PythonLoopObject, args: PyObject) !PyObject {
     python_c.Py_INCREF(py_handle.?);
     errdefer python_c.Py_DECREF(py_handle.?);
 
-    const loop_obj = &self.loop_obj.?;
+    const loop_obj = self.loop_obj.?;
 
     const mutex = &loop_obj.mutex;
     mutex.lock();

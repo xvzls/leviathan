@@ -12,19 +12,19 @@ pub const CallbackType = enum { Python, Zig };
 pub const FutureCallback = *const fn (?*anyopaque) bool;
 
 inline fn create_handle_for_zig_callback(
-    allocator: std.mem.allocator, future: *Future, callback: FutureCallback, args: ?*anyopaque
+    allocator: std.mem.Allocator, future: *Future, callback: FutureCallback, args: ?*anyopaque
 ) !*Handle {
-    const handle = try allocator.create(Handle);
-    handle.* = Handle.init(allocator, callback, args orelse future, false);
+    const handle = try Handle.init(allocator, null, future.loop.?, callback, args orelse future, false);
     return handle;
 }
 
 fn create_handle_for_python_callback(args: *python_c.PyObject) !*Handle {
-    const py_handle: *Handle.PythonHandleObject = python_c.PyObject_CallObject(
-        @ptrCast(&Handle.PythonHandleType), @ptrCast(args)
-    ) orelse return error.PythonError;
+    const py_handle: *Handle.PythonHandleObject = @ptrCast(
+        python_c.PyObject_CallObject(@ptrCast(&Handle.PythonHandleType), @ptrCast(args))
+            orelse return error.PythonError
+    );
 
-    return &py_handle.handle_obj.?;
+    return py_handle.handle_obj.?;
 }
 
 pub fn add_done_callback(
@@ -43,29 +43,28 @@ pub fn add_done_callback(
     };
 
     var b_node: *BTree.Node = undefined;
-    const existing_handle_node: ?LinkedList.Node = @ptrCast(callbacks_btree.search(callback_id, &b_node));
+    const existing_handle_node: ?LinkedList.Node = @alignCast(
+        @ptrCast(callbacks_btree.search(callback_id, &b_node))
+    );
     if (existing_handle_node) |node| {
-        const existing_handle: *Handle = @ptrCast(node.data.?);
+        const existing_handle: *Handle = @alignCast(@ptrCast(node.data.?));
         existing_handle.repeat +|= 1;
     }else{
         const allocator = self.callbacks_arena_allocator;
         const handle = switch (callback_type) {
-            .Python => try create_handle_for_python_callback(args.?),
+            .Python => try create_handle_for_python_callback(@alignCast(@ptrCast(args.?))),
             .Zig => try create_handle_for_zig_callback(allocator, self, callback.?, args)
         };
         errdefer {
             switch (callback_type) {
-                .Python => {
-                    const py_handle: *Handle.PythonHandleObject = @fieldParentPtr("handle_obj", handle);
-                    python_c.Py_DECREF(@ptrCast(py_handle));
-                },
+                .Python => python_c.Py_DECREF(@ptrCast(handle.py_handle.?)),
                 .Zig => allocator.destroy(handle)
             }
         }
 
         const callback_node = try callbacks_array.create_new_node(handle);
-        callbacks_btree.insert_in_node(callbacks_btree.allocator, b_node, callback_id, callback_node);
-        callbacks_array.append_node(callbacks_array);
+        BTree.insert_in_node(callbacks_btree.allocator, b_node, callback_id, callback_node);
+        callbacks_array.append_node(callback_node);
     }
 }
 
@@ -82,10 +81,10 @@ pub fn remove_done_callback(self: *Future, callback_id: u64, callback_type: Call
         .Zig => self.zig_callbacks
     };
 
-    const callback_node: LinkedList.Node = @ptrCast(
-        callbacks_btree.delete(callback_id) orelse return error.CallbackNotFound
+    const callback_node: LinkedList.Node = @alignCast(
+        @ptrCast(callbacks_btree.delete(callback_id) orelse return error.CallbackNotFound)
     );
-    const handle: *Handle = @ptrCast(callback_node.data.?);
+    const handle: *Handle = @alignCast(@ptrCast(callback_node.data.?));
     const callbacks_removed = handle.repeat;
 
     const n_prev = callback_node.prev;
@@ -105,10 +104,7 @@ pub fn remove_done_callback(self: *Future, callback_id: u64, callback_type: Call
 
     const allocator = self.callbacks_arena_allocator;
     switch (callback_type) {
-        .Python => {
-            const py_handle: *Handle.PythonHandleObject = @fieldParentPtr("handle_obj", handle);
-            python_c.Py_DECREF(@ptrCast(py_handle));
-        },
+        .Python => python_c.Py_DECREF(@ptrCast(handle.py_handle.?)),
         .Zig => allocator.destroy(handle)
     }
     allocator.destroy(callback_node);

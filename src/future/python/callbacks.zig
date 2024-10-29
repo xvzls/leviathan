@@ -20,7 +20,7 @@ pub fn future_add_done_callback(self: ?*PythonFutureObject, args: ?PyObject) cal
         return null;
     }
 
-    const obj = &instance.future_obj.?;
+    const obj = instance.future_obj.?;
     const mutex = &obj.mutex;
     mutex.lock();
     defer mutex.unlock();
@@ -55,18 +55,17 @@ pub fn future_remove_done_callback(self: ?*PythonFutureObject, args: ?PyObject) 
         return null;
     }
 
-    const obj = &instance.future_obj.?;
+    const obj = instance.future_obj.?;
     const mutex = &obj.mutex;
     mutex.lock();
     defer mutex.unlock();
 
-    const removed_count = obj.remove_done_callback(callback_id) catch |err| switch (err) {
-        error.PythonError => return null,
-        else => {
-            const err_trace = @errorReturnTrace();
-            utils.print_error_traces(err_trace, err);
-            utils.put_python_runtime_error_message(@errorName(err));
-        }
+    const removed_count = obj.remove_done_callback(callback_id, .Python) catch |err| {
+        const err_trace = @errorReturnTrace();
+        utils.print_error_traces(err_trace, err);
+        utils.put_python_runtime_error_message(@errorName(err));
+
+        return null;
     };
 
     return python_c.PyLong_FromUnsignedLongLong(@intCast(removed_count));

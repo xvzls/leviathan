@@ -14,7 +14,7 @@ pub fn future_cancel(self: ?*PythonFutureObject, args: ?PyObject) callconv(.C) ?
         return null;
     }
 
-    const obj = &instance.future_obj.?;
+    const obj = instance.future_obj.?;
     const mutex = &obj.mutex;
     mutex.lock();
     defer mutex.unlock();
@@ -41,7 +41,7 @@ pub fn future_cancelled(self: ?*PythonFutureObject, _: ?PyObject) callconv(.C) ?
         return null;
     }
 
-    const obj = &instance.future_obj.?;
+    const obj = instance.future_obj.?;
     const mutex = &obj.mutex;
     mutex.lock();
     defer mutex.unlock();

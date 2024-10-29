@@ -14,7 +14,7 @@ pub fn future_result(self: ?*PythonFutureObject, _: ?PyObject) callconv(.C) ?PyO
     }
 
     const instance = self.?;
-    const obj = &instance.future_obj.?;
+    const obj = instance.future_obj.?;
     const mutex = &obj.mutex;
     mutex.lock();
     defer mutex.unlock();
@@ -53,7 +53,7 @@ pub fn future_set_result(self: ?*PythonFutureObject, args: ?PyObject) callconv(.
         return null;
     }
 
-    const obj = &instance.future_obj.?;
+    const obj = instance.future_obj.?;
     const mutex = &obj.mutex;
     mutex.lock();
     defer mutex.unlock();
@@ -83,7 +83,7 @@ pub fn future_done(self: ?*PythonFutureObject, _: ?PyObject) callconv(.C) ?PyObj
         return null;
     }
 
-    const obj = &instance.future_obj.?;
+    const obj = instance.future_obj.?;
     const mutex = &obj.mutex;
     mutex.lock();
     defer mutex.unlock();

@@ -38,10 +38,14 @@ pub inline fn call_soon_without_handle_threadsafe(
     try self.call_soon_without_handle(callback, data);
 }
 
-inline fn get_ready_events(loop: *Loop, index: *u8) *LinkedList {
+inline fn get_ready_events(loop: *Loop, index: *u8) ?*LinkedList {
     const mutex = &loop.mutex;
     mutex.lock();
     defer mutex.unlock();
+
+    if (loop.stopping) {
+        return null;
+    }
 
     const ready_tasks_queue_to_use = loop.ready_tasks_queue_to_use;
     const ready_tasks_queue = &loop.ready_tasks_queues[ready_tasks_queue_to_use];
@@ -51,14 +55,14 @@ inline fn get_ready_events(loop: *Loop, index: *u8) *LinkedList {
     return ready_tasks_queue;
 }
 
-pub inline fn call_once(self: *Loop) void {
+pub inline fn call_once(self: *Loop) bool {
     var queue_index: u8 = undefined;
-    const queue = get_ready_events(self, &queue_index);
+    const queue = get_ready_events(self, &queue_index) orelse return true;
 
     var _node: ?LinkedList.Node = queue.first;
     if (_node == null) {
         self.stopping = true;
-        return;
+        return true;
     }
 
     while (_node) |node| {
@@ -71,4 +75,9 @@ pub inline fn call_once(self: *Loop) void {
     }
 
     self.ready_tasks_arenas[queue_index].reset(.{ .retain_with_limit = self.ready_tasks_queue_min_bytes_capacity });
+    queue.first = null;
+    queue.last = null;
+    queue.len = 0;
+
+    return false;
 }

@@ -17,7 +17,7 @@ status: FutureStatus = .PENDING,
 mutex: std.Thread.Mutex,
 
 callbacks_arena: std.heap.ArenaAllocator,
-callbacks_arena_allocator: std.mem.Allocator,
+callbacks_arena_allocator: std.mem.Allocator = undefined,
 zig_callbacks: *BTree = undefined,
 python_callbacks: *BTree = undefined,
 callbacks_array: LinkedList = undefined,
@@ -25,7 +25,10 @@ callbacks_array: LinkedList = undefined,
 loop: ?*Loop,
 
 
-pub fn init(self: *Future, allocator: std.mem.Allocator, thread_safe: bool, loop: *Loop) !void {
+pub fn init(allocator: std.mem.Allocator, thread_safe: bool, loop: *Loop) !*Future {
+    const fut = try allocator.create(Future);
+    errdefer allocator.destroy(fut);
+
     const mutex = blk: {
         if (thread_safe or builtin.mode == .Debug) {
             break :blk std.Thread.Mutex{};
@@ -36,20 +39,22 @@ pub fn init(self: *Future, allocator: std.mem.Allocator, thread_safe: bool, loop
         }
     };
 
-    self.* = .{
+    fut.* = .{
         .loop = loop,
         .mutex = mutex,
         .callbacks_arena = std.heap.ArenaAllocator.init(allocator)
     };
 
-    self.callbacks_arena_allocator = self.callbacks_arena.allocator();
-    self.zig_callbacks = try BTree.init(self.callbacks_arena_allocator);
-    errdefer self.zig_callbacks.release() catch unreachable;
+    fut.callbacks_arena_allocator = fut.callbacks_arena.allocator();
+    fut.zig_callbacks = try BTree.init(fut.callbacks_arena_allocator);
+    errdefer fut.zig_callbacks.release() catch unreachable;
 
-    self.python_callbacks = try BTree.init(self.callbacks_arena_allocator);
-    errdefer self.python_callbacks.release() catch unreachable;
+    fut.python_callbacks = try BTree.init(fut.callbacks_arena_allocator);
+    errdefer fut.python_callbacks.release() catch unreachable;
 
-    self.callbacks_array = LinkedList.init(self.callbacks_arena_allocator);
+    fut.callbacks_array = LinkedList.init(fut.callbacks_arena_allocator);
+
+    return fut;
 }
 
 pub inline fn release(self: *Future) void {
