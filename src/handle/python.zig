@@ -41,7 +41,11 @@ fn callback_for_python_methods(data: ?*anyopaque) bool {
             orelse return true;
         defer python_c.Py_DECREF(exception);
 
-        const exc_handler_ret: PyObject = python_c.PyObject_CallObject(py_handle.exception_handler.?, exception)
+        const py_args: PyObject = python_c.Py_BuildValue("(O)\x00", exception)
+            orelse return true;
+        defer python_c.Py_DECREF(py_args);
+
+        const exc_handler_ret: PyObject = python_c.PyObject_CallObject(py_handle.exception_handler.?, py_args)
             orelse return true;
         python_c.Py_DECREF(exc_handler_ret);
     }
@@ -76,6 +80,9 @@ fn handle_dealloc(self: ?*PythonHandleObject) void {
         @panic("Invalid Leviathan's object");
     }
     const py_handle = self.?;
+    if (py_handle.handle_obj) |handle| {
+        allocator.destroy(handle);
+    }
 
     python_c.Py_XDECREF(py_handle.contextvars);
     python_c.Py_XDECREF(py_handle.py_callback);
@@ -89,24 +96,22 @@ fn handle_dealloc(self: ?*PythonHandleObject) void {
 inline fn z_handle_init(
     self: *PythonHandleObject, args: ?PyObject, kwargs: ?PyObject
 ) !c_int {
-    var kwlist: [7][*c]u8 = undefined;
-    kwlist[0] = @constCast("callback\x00");
-    kwlist[1] = @constCast("args\x00");
-    kwlist[2] = @constCast("loop\x00");
-    kwlist[3] = @constCast("context\x00");
-    kwlist[4] = @constCast("exc_handler\x00");
-    kwlist[5] = @constCast("thread_safe\x00");
-    kwlist[6] = null;
+    var kwlist: [6][*c]u8 = undefined;
+    kwlist[0] = @constCast("callback_info\x00");
+    kwlist[1] = @constCast("loop\x00");
+    kwlist[2] = @constCast("context\x00");
+    kwlist[3] = @constCast("exc_handler\x00");
+    kwlist[4] = @constCast("thread_safe\x00");
+    kwlist[5] = null;
 
-    var py_callback: ?PyObject = null;
     var py_callback_args: ?PyObject = null;
-    var py_loop: ?*Loop.constructors.PythonLoopObject = null;
+    var py_loop: ?PyObject = null;
     var py_context: ?PyObject = null;
     var exception_handler: ?PyObject = null;
     var thread_safe: u8 = 0;
 
     if (python_c.PyArg_ParseTupleAndKeywords(
-            args, kwargs, "OOOOOB\x00", @ptrCast(&kwlist), &py_callback, &py_callback_args, &py_loop, &py_context,
+            args, kwargs, "OOOOB\x00", @ptrCast(&kwlist), &py_callback_args, &py_loop, &py_context,
             &exception_handler, &thread_safe
     ) < 0) {
         return error.PythonError;
@@ -117,8 +122,10 @@ inline fn z_handle_init(
         utils.put_python_runtime_error_message("Invalid asyncio event loop. Only Leviathan's event loops are allowed\x00");
         return error.PythonError;
     }
+    python_c.Py_INCREF(py_loop.?);
+    errdefer python_c.Py_DECREF(py_loop.?);
 
-    const contextvars_run_func: PyObject = python_c.PyObject_GetAttrString(py_callback.?, "run\x00")
+    const contextvars_run_func: PyObject = python_c.PyObject_GetAttrString(py_context.?, "run\x00")
         orelse return error.PythonError;
     errdefer python_c.Py_DECREF(contextvars_run_func);
 
@@ -127,18 +134,15 @@ inline fn z_handle_init(
         return error.PythonError;
     }
 
-    const py_args: PyObject = python_c.Py_BuildValue("OO\x00", py_callback.?, py_callback_args.?)
-        orelse return error.PythonError;
-
     self.handle_obj = try Handle.init(
         allocator, self, leviathan_loop.loop_obj.?, &callback_for_python_methods, self, (thread_safe != 0)
     );
     
     self.exception_handler = python_c.Py_NewRef(exception_handler.?).?;
-    self.py_callback = python_c.Py_NewRef(contextvars_run_func).?;
-    self.py_loop = @ptrCast(python_c.Py_NewRef(@ptrCast(leviathan_loop)).?);
+    self.py_callback = contextvars_run_func;
+    self.py_loop = leviathan_loop;
     self.contextvars = python_c.Py_NewRef(py_context.?).?;
-    self.args = python_c.Py_NewRef(py_args).?;
+    self.args = python_c.Py_NewRef(py_callback_args.?).?;
 
     return 0;
 }
@@ -186,6 +190,30 @@ fn handle_cancelled(self: ?*PythonHandleObject, _: ?PyObject) callconv(.C) ?PyOb
 
     return python_c.PyBool_FromLong(@intCast(handle_obj.cancelled));
 }
+
+const PythonhandleMethods: []const python_c.PyMethodDef = &[_]python_c.PyMethodDef{
+    python_c.PyMethodDef{
+        .ml_name = "cancel\x00",
+        .ml_meth = @ptrCast(&handle_cancel),
+        .ml_doc = "Cancel the callback. If the callback has already been canceled or executed, this method has no effect.\x00",
+        .ml_flags = python_c.METH_NOARGS
+    },
+    python_c.PyMethodDef{
+        .ml_name = "cancelled\x00",
+        .ml_meth = @ptrCast(&handle_cancelled),
+        .ml_doc = "Return True if the callback was cancelled.\x00",
+        .ml_flags = python_c.METH_NOARGS
+    },
+    python_c.PyMethodDef{
+        .ml_name = "get_context\x00",
+        .ml_meth = @ptrCast(&handle_get_context),
+        .ml_doc = "Return the contextvars.Context object associated with the handle.\x00",
+        .ml_flags = python_c.METH_NOARGS
+    },
+    python_c.PyMethodDef{
+        .ml_name = null, .ml_meth = null, .ml_doc = null, .ml_flags = 0
+    }
+};
 
 pub var PythonHandleType = python_c.PyTypeObject{
     .tp_name = "leviathan.Handle\x00",

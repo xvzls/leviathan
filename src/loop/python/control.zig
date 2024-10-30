@@ -18,36 +18,12 @@ pub fn loop_run_forever(self: ?*PythonLoopObject, _: ?PyObject) callconv(.C) ?Py
     }
 
     const loop_obj = instance.loop_obj.?;
-    const mutex = &loop_obj.mutex;
-    {
-        mutex.lock();
-        defer mutex.unlock();
+    loop_obj.run_forever() catch return null;
 
-        if (loop_obj.closed) {
-            utils.put_python_runtime_error_message("Loop is closed\x00");
-            return null;
-        }
-
-        if (loop_obj.stopping) {
-            utils.put_python_runtime_error_message("Loop is stopping\x00");
-            return null;
-        }
-
-        if (loop_obj.running) {
-            utils.put_python_runtime_error_message("Loop is already running\x00");
-            return null;
-        }
-
-        loop_obj.running = true;
-        loop_obj.stopping = false;
-    }
-
-    while (loop_obj.call_once()) {}
-
-    mutex.lock();
-    loop_obj.running = false;
-    loop_obj.stopping = false;
-    mutex.unlock();
+    const exception: PyObject = python_c.PyErr_GetRaisedException()
+        orelse return python_c.get_py_none();
+    python_c.PyErr_SetRaisedException(exception);
+    return null;
 }
 
 

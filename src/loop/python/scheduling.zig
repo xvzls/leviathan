@@ -20,7 +20,7 @@ fn z_loop_call_soon(self: *PythonLoopObject, args: PyObject) !PyObject {
     var py_handle: ?*Handle.PythonHandleObject = null;
 
     if (python_c.PyArg_ParseTupleAndKeywords(
-            args, null, "O\x00", @ptrCast(&kwlist), @ptrCast(&py_handle)
+            args, null, "O\x00", @ptrCast(&kwlist), &py_handle
         ) < 0) {
         return error.PythonError;
     }
@@ -29,8 +29,8 @@ fn z_loop_call_soon(self: *PythonLoopObject, args: PyObject) !PyObject {
         return error.PythonError;
     }
 
-    python_c.Py_INCREF(py_handle.?);
-    errdefer python_c.Py_DECREF(py_handle.?);
+    python_c.Py_INCREF(@ptrCast(py_handle.?));
+    errdefer python_c.Py_DECREF(@ptrCast(py_handle.?));
 
     const loop_obj = self.loop_obj.?;
 
@@ -48,9 +48,9 @@ fn z_loop_call_soon(self: *PythonLoopObject, args: PyObject) !PyObject {
         return error.PythonError;
     }
 
-    try loop_obj.call_soon(&py_handle.?.handle_obj.?);
+    try loop_obj.call_soon(py_handle.?.handle_obj.?);
 
-    return py_handle.?;
+    return python_c.get_py_none();
 }
 
 pub fn loop_call_soon(self: ?*PythonLoopObject, args: ?PyObject) callconv(.C) ?PyObject {

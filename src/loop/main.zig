@@ -69,16 +69,22 @@ pub fn init(allocator: std.mem.Allocator, thread_safe: bool, rtq_min_capacity: u
     return loop;
 }
 
-pub fn release(loop: *Loop) void {
-    inline for (&loop.ready_tasks_arenas) |*ready_tasks_arena| {
+pub fn release(self: *Loop) void {
+    inline for (&self.ready_tasks_arenas) |*ready_tasks_arena| {
         ready_tasks_arena.deinit();
     }
 
-    const delayed_tasks_btree = loop.delayed_tasks.btree;
+    const delayed_tasks_btree = self.delayed_tasks.btree;
     while (delayed_tasks_btree.pop(null) != null) {}
+    delayed_tasks_btree.release() catch unreachable;
+
+    const allocator = self.allocator;
+
+    allocator.destroy(self);
 }
 
 
+pub usingnamespace @import("control.zig");
 pub usingnamespace @import("scheduling.zig");
 pub usingnamespace @import("python/main.zig");
 

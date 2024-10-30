@@ -43,6 +43,8 @@ pub fn init(
 }
 
 pub inline fn run_callback(self: *Handle) bool {
+    if (self.cancelled) return false;
+
     var index: usize = 0;
     const limit = self.repeat;
     var should_stop: bool = false;

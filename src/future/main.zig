@@ -11,6 +11,8 @@ pub const FutureStatus = enum {
     PENDING, FINISHED, CANCELED
 };
 
+allocator: std.mem.Allocator,
+
 result: ?*anyopaque = null,
 status: FutureStatus = .PENDING,
 
@@ -40,6 +42,7 @@ pub fn init(allocator: std.mem.Allocator, thread_safe: bool, loop: *Loop) !*Futu
     };
 
     fut.* = .{
+        .allocator = allocator,
         .loop = loop,
         .mutex = mutex,
         .callbacks_arena = std.heap.ArenaAllocator.init(allocator)
@@ -59,6 +62,9 @@ pub fn init(allocator: std.mem.Allocator, thread_safe: bool, loop: *Loop) !*Futu
 
 pub inline fn release(self: *Future) void {
     self.callbacks_arena.deinit();
+    const allocator = self.allocator;
+
+    allocator.destroy(self);
 }
 
 pub usingnamespace @import("callback.zig");

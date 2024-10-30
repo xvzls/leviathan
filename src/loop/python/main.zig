@@ -4,7 +4,7 @@ pub const constructors = @import("constructors.zig");
 const control = @import("control.zig");
 const scheduling = @import("scheduling.zig");
 
-const PythonFutureMethods: []const python_c.PyMethodDef = &[_]python_c.PyMethodDef{
+const PythonLoopMethods: []const python_c.PyMethodDef = &[_]python_c.PyMethodDef{
     python_c.PyMethodDef{
         .ml_name = "run_forever\x00",
         .ml_meth = @ptrCast(&control.loop_run_forever),
@@ -36,15 +36,9 @@ const PythonFutureMethods: []const python_c.PyMethodDef = &[_]python_c.PyMethodD
         .ml_flags = python_c.METH_NOARGS
     },
     python_c.PyMethodDef{
-        .ml_name = "call_soon\x00",
+        .ml_name = "_call_soon\x00",
         .ml_meth = @ptrCast(&scheduling.loop_call_soon),
         .ml_doc = "Schedule callback to be called with args arguments at the next iteration of the event loop.\x00",
-        .ml_flags = python_c.METH_VARARGS
-    },
-    python_c.PyMethodDef{
-        .ml_name = "call_soon_threadsafe\x00",
-        .ml_meth = @ptrCast(&scheduling.loop_call_soon),
-        .ml_doc = "A thread-safe variant of call_soon\x00",
         .ml_flags = python_c.METH_VARARGS
     },
     python_c.PyMethodDef{
@@ -61,5 +55,6 @@ pub var PythonLoopType = python_c.PyTypeObject{
     .tp_new = &constructors.loop_new,
     .tp_init = @ptrCast(&constructors.loop_init),
     .tp_dealloc = @ptrCast(&constructors.loop_dealloc),
+    .tp_methods = @constCast(PythonLoopMethods.ptr)
 };
 

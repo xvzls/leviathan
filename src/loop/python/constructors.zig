@@ -51,6 +51,7 @@ pub fn loop_dealloc(self: ?*PythonLoopObject) callconv(.C) void {
     }
     const py_loop = self.?;
 
+    @import("std").log.warn("Loop deallocated", .{});
     if (py_loop.loop_obj) |loop| {
         if (!loop.closed) {
             @panic("Loop is not closed, can't be deallocated");
@@ -60,6 +61,7 @@ pub fn loop_dealloc(self: ?*PythonLoopObject) callconv(.C) void {
             @panic("Loop is running, can't be deallocated");
         }
 
+        @import("std").log.warn("Loop deallocated", .{});
         loop.release();
     }
 

@@ -7,14 +7,14 @@ T = TypeVar('T')
 
 
 class Future(asyncio.Future[T]):
-	def __init__(self, *, loop: asyncio.AbstractEventLoop | None = None) -> None:
+	def __init__(self, *, loop: asyncio.AbstractEventLoop | None = None, thread_safe: bool = False) -> None:
 		if loop is None:
 			loop = asyncio.get_running_loop()
 		leviathan_loop = getattr(loop, "_loop_leviathan_class", None)
 		if leviathan_loop is None:
 			raise ValueError("The given loop is not a leviathan event loop")
 	
-		self._future_leviathan_class = _Future(leviathan_loop)
+		self._future_leviathan_class = _Future(leviathan_loop, thread_safe)
 
 	def __getattribute__(self, name: str, /) -> Any:
 		if name == '_future_leviathan_class':
