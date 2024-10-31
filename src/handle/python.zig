@@ -15,16 +15,19 @@ pub const PythonHandleObject = extern struct {
     handle_obj: ?*Handle,
 
     exception_handler: ?PyObject,
-
     contextvars: ?PyObject,
     py_callback: ?PyObject,
     py_loop: ?*Loop.constructors.PythonLoopObject,
     args: ?PyObject
 };
 
-fn callback_for_python_methods(data: ?*anyopaque) bool {
+fn callback_for_python_methods(handle: *Handle, data: ?*anyopaque) bool {
     const py_handle: *PythonHandleObject = @alignCast(@ptrCast(data.?));
     defer python_c.Py_DECREF(@ptrCast(py_handle));
+
+    if (handle.cancelled) {
+        return false;
+    }
 
     const ret: ?PyObject = python_c.PyObject_CallObject(py_handle.py_callback.?, py_handle.args.?);
     if (ret) |value| {
@@ -88,6 +91,7 @@ fn handle_dealloc(self: ?*PythonHandleObject) void {
     python_c.Py_XDECREF(py_handle.py_callback);
     python_c.Py_XDECREF(@ptrCast(py_handle.py_loop));
     python_c.Py_XDECREF(py_handle.args);
+    python_c.Py_XDECREF(py_handle.exception_handler);
 
     const @"type": *python_c.PyTypeObject = @ptrCast(python_c.Py_TYPE(@ptrCast(self.?)) orelse unreachable);
     @"type".tp_free.?(@ptrCast(self.?));
@@ -168,7 +172,7 @@ fn handle_cancel(self: ?*PythonHandleObject, _: ?PyObject) callconv(.C) ?PyObjec
         return null;
     }
 
-    const handle_obj = &self.?.handle_obj.?;
+    const handle_obj = self.?.handle_obj.?;
     const mutex = &handle_obj.mutex;
     mutex.lock();
     defer mutex.unlock();
@@ -183,12 +187,12 @@ fn handle_cancelled(self: ?*PythonHandleObject, _: ?PyObject) callconv(.C) ?PyOb
         return null;
     }
 
-    const handle_obj = &self.?.handle_obj.?;
+    const handle_obj = self.?.handle_obj.?;
     const mutex = &handle_obj.mutex;
     mutex.lock();
     defer mutex.unlock();
 
-    return python_c.PyBool_FromLong(@intCast(handle_obj.cancelled));
+    return python_c.PyBool_FromLong(@intCast(@intFromBool(handle_obj.cancelled)));
 }
 
 const PythonhandleMethods: []const python_c.PyMethodDef = &[_]python_c.PyMethodDef{
@@ -224,5 +228,6 @@ pub var PythonHandleType = python_c.PyTypeObject{
     .tp_new = &handle_new,
     .tp_init = @ptrCast(&handle_init),
     .tp_dealloc = @ptrCast(&handle_dealloc),
+    .tp_methods = @constCast(PythonhandleMethods.ptr),
 };
 

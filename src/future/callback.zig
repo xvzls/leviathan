@@ -9,7 +9,7 @@ const python_c = @import("../utils/python_c.zig");
 
 
 pub const CallbackType = enum { Python, Zig };
-pub const FutureCallback = *const fn (?*anyopaque) bool;
+pub const FutureCallback = Handle.HandleCallback;
 
 inline fn create_handle_for_zig_callback(
     allocator: std.mem.Allocator, future: *Future, callback: FutureCallback, args: ?*anyopaque

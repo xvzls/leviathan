@@ -1,4 +1,5 @@
-from .leviathan_zig import Loop as _Loop # type: ignore
+from .leviathan_zig import Loop as _Loop
+from .leviathan_zig import Handle as _Handle
 from .handle import Handle
 
 from typing import Callable, Unpack, TypeVarTuple, Any
@@ -15,18 +16,20 @@ class Loop(asyncio.AbstractEventLoop):
 		self._loop_leviathan_class = loop_leviathan_class
 
 		for x in dir(loop_leviathan_class):
-			if x.startswith("__"):
+			if x.startswith("_"):
 				continue
 			obj = getattr(loop_leviathan_class, x)
 			if callable(obj):
 				setattr(self, x, obj)
 
+		self._call_soon = loop_leviathan_class._call_soon
+	
 		self._exception_handler = self.default_exception_handler
 
 	def call_soon(self, callback: Callable[[Unpack[_Ts]], object], *args: Unpack[_Ts],
 			   context: Context | None = None) -> Handle:
 		handle = Handle(callback, args, self, context)
-		self._loop_leviathan_class._call_soon(handle._handle_leviathan_class)
+		self._call_soon(handle._handle_leviathan_class)
 		return handle
 
 	def default_exception_handler(self, context: dict[str, Any]) -> None:

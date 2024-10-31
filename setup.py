@@ -1,14 +1,32 @@
-from setuptools import setup, find_packages
+from setuptools import setup, find_packages, Command
 from setuptools.command.develop import develop
 from setuptools.command.install import install
 from setuptools.command.build_ext import build_ext
-import os, shutil, subprocess, stat
+import os, shutil, subprocess, stat, sys
 
-from typing import Literal
+from typing import Literal, Any
 
 
 zig_mode: Literal['Debug', 'ReleaseSafe'] = "Debug"
 
+
+class LeviathanTest(Command):
+	user_options: list[Any] = []
+
+	def initialize_options(self) -> None:
+		pass
+
+	def finalize_options(self) -> None:
+		pass
+
+	def run(self) -> None:
+		print("Running zig tests...")
+		subprocess.check_call(["zig", "build", "test"])
+
+		self.run_command("build_ext")
+
+		errno = subprocess.call([sys.executable, "-m", "pytest"])
+		raise SystemExit(errno)
 
 class ZigBuildCommand(build_ext):
 	def run(self) -> None:
@@ -62,6 +80,7 @@ setup(
 	cmdclass={
 		"build_ext": ZigBuildCommand,
 		"develop": ZigDevelopCommand,
-		"install": ZigInstallCommand
+		"install": ZigInstallCommand,
+		"test": LeviathanTest
 	}
 )

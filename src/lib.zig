@@ -8,49 +8,24 @@ const future = @import("future/main.zig");
 const loop = @import("loop/main.zig");
 const handle = @import("handle/main.zig");
 
-
-// fn testing_function(self: ?*python_c.PyObject, args: ?*python_c.PyObject) callconv(.C) ?*python_c.PyObject {
-//     std.debug.print("HOLA!!!", .{});
-//     _ = self;
-//     _ = args;
-
-//     python_c.Py_INCREF(python_c.Py_None());
-//     return python_c.Py_None();
-// }
-
-// const leviathan_methods: []const python_c.PyMethodDef = &[_]python_c.PyMethodDef{
-//     python_c.PyMethodDef{
-//         .ml_name = "testing_function\x00", .ml_meth = &testing_function,
-//         .ml_doc = null, .ml_flags = python_c.METH_NOARGS
-//     },
-
-//     python_c.PyMethodDef{
-//         .ml_name = null, .ml_meth = null, .ml_doc = null, .ml_flags = 0
-//     }
-// };
-
+const leviathan_types = .{
+    &future.PythonFutureType,
+    &loop.PythonLoopType,
+    &handle.PythonHandleType
+};
 
 fn on_module_exit() callconv(.C) void {
-    _ = utils.gpa.detectLeaks();
     _ = utils.gpa.deinit();
 }
-
 
 var leviathan_module = python_c.PyModuleDef{
     .m_name = "leviathan_zig\x00",
     .m_doc = "Leviathan: A lightning-fast Zig-powered event loop for Python's asyncio.\x00",
     .m_size = -1,
-    // .m_methods = @constCast(leviathan_methods.ptr),
 };
 
 inline fn initialize_leviathan_types() !void {
-    const types_to_initialize = .{
-        &future.PythonFutureType,
-        &loop.PythonLoopType,
-        &handle.PythonHandleType
-    };
-
-    inline for (types_to_initialize) |v| {
+    inline for (leviathan_types) |v| {
         if (python_c.PyType_Ready(v) < 0) {
             return error.PythonError;
         }
@@ -60,12 +35,7 @@ inline fn initialize_leviathan_types() !void {
 }
 
 inline fn deinitialize_leviathan_types() void {
-    const types_to_release = .{
-        &future.PythonFutureType,
-        &loop.PythonLoopType,
-        &handle.PythonHandleType
-    };
-    inline for (types_to_release) |v| {
+    inline for (leviathan_types) |v| {
         python_c.Py_DECREF(@ptrCast(v));
     }
 }
@@ -76,15 +46,11 @@ inline fn initialize_python_module() !*python_c.PyObject {
     const module: *python_c.PyObject = python_c.PyModule_Create(&leviathan_module) orelse return error.PythonError;
     errdefer python_c.Py_DECREF(module);
 
-    const leviathan_modules = .{
-        .{"Future\x00", &future.PythonFutureType},
-        .{"Loop\x00", &loop.PythonLoopType},
-        .{"Handle\x00", &handle.PythonHandleType},
+    const leviathan_modules_name = .{
+        "Future\x00", "Loop\x00", "Handle\x00"
     };
 
-    inline for (leviathan_modules) |v| {
-        const leviathan_module_name = v[0];
-        const leviathan_module_obj = v[1];
+    inline for (leviathan_modules_name, leviathan_types) |leviathan_module_name, leviathan_module_obj| {
         if (
             python_c.PyModule_AddObject(
                 module, leviathan_module_name, @as(*python_c.PyObject, @ptrCast(leviathan_module_obj))
@@ -93,7 +59,6 @@ inline fn initialize_python_module() !*python_c.PyObject {
             return error.PythonError;
         }
     }
-
 
     if (builtin.mode == .Debug) {
         if (python_c.Py_AtExit(&on_module_exit) < 0) {

@@ -4,11 +4,13 @@ const builtin = @import("builtin");
 const NoOpMutex = @import("../utils/no_op_mutex.zig");
 const Loop = @import("../loop/main.zig");
 
+pub const HandleCallback = *const fn (*Handle, ?*anyopaque) bool;
+
 allocator: std.mem.Allocator,
 mutex: std.Thread.Mutex,
 cancelled: bool = false,
 repeat: usize = 1,
-callback: *const fn (?*anyopaque) bool,
+callback: HandleCallback,
 data: ?*anyopaque,
 loop: *Loop,
 
@@ -16,7 +18,7 @@ py_handle: ?*Handle.PythonHandleObject,
 
 pub fn init(
     allocator: std.mem.Allocator, py_handle: ?*Handle.PythonHandleObject, loop: *Loop,
-    callback: *const fn (?*anyopaque) bool, data: ?*anyopaque, thread_safe: bool
+    callback: HandleCallback, data: ?*anyopaque, thread_safe: bool
 ) !*Handle {
     const handle = try allocator.create(Handle);
 
@@ -43,8 +45,6 @@ pub fn init(
 }
 
 pub inline fn run_callback(self: *Handle) bool {
-    if (self.cancelled) return false;
-
     var index: usize = 0;
     const limit = self.repeat;
     var should_stop: bool = false;
@@ -52,7 +52,7 @@ pub inline fn run_callback(self: *Handle) bool {
     const callback = self.callback;
     const data = self.data;
     while (!should_stop and index < limit) : (index += 1) {
-        should_stop = callback(data);
+        should_stop = callback(self, data);
     }
     return should_stop;
 }
