@@ -18,10 +18,22 @@ const PythonFutureMethods: []const python_c.PyMethodDef = &[_]python_c.PyMethodD
         .ml_flags = python_c.METH_VARARGS
     },
     python_c.PyMethodDef{
+        .ml_name = "exception\x00",
+        .ml_meth = @ptrCast(&result.future_exception),
+        .ml_doc = "Return the exception raised by the Future\x00",
+        .ml_flags = python_c.METH_NOARGS
+    },
+    python_c.PyMethodDef{
+        .ml_name = "set_exception\x00",
+        .ml_meth = @ptrCast(&result.future_set_exception),
+        .ml_doc = "Mark the Future as done and set its exception.\x00",
+        .ml_flags = python_c.METH_VARARGS
+    },
+    python_c.PyMethodDef{
         .ml_name = "cancel\x00",
         .ml_meth = @ptrCast(&cancel.future_cancel),
         .ml_doc = "Cancel the Future and schedule callbacks.\x00",
-        .ml_flags = python_c.METH_VARARGS
+        .ml_flags = python_c.METH_VARARGS | python_c.METH_KEYWORDS
     },
     python_c.PyMethodDef{
         .ml_name = "cancelled\x00",
@@ -57,9 +69,11 @@ pub var PythonFutureType = python_c.PyTypeObject{
     .tp_doc = "Leviathan's future class\x00",
     .tp_basicsize = @sizeOf(constructors.PythonFutureObject),
     .tp_itemsize = 0,
-    .tp_flags = python_c.Py_TPFLAGS_DEFAULT | python_c.Py_TPFLAGS_BASETYPE,
+    .tp_flags = python_c.Py_TPFLAGS_DEFAULT | python_c.Py_TPFLAGS_BASETYPE | python_c.Py_TPFLAGS_HAVE_GC,
     .tp_new = &constructors.future_new,
     .tp_init = @ptrCast(&constructors.future_init),
+    .tp_traverse = @ptrCast(&constructors.future_traverse),
+    .tp_clear = @ptrCast(&constructors.future_clear),
     .tp_dealloc = @ptrCast(&constructors.future_dealloc),
     .tp_methods = @constCast(PythonFutureMethods.ptr)
 };

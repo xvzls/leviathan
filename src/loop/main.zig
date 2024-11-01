@@ -37,7 +37,7 @@ running: bool = false,
 stopping: bool = false,
 closed: bool = false,
 
-py_loop: ?*python_c.PyObject = null,
+py_loop: ?*Loop.constructors.PythonLoopObject = null,
 
 pub fn init(allocator: std.mem.Allocator, thread_safe: bool, rtq_min_capacity: usize) !*Loop {
     const loop = try allocator.create(Loop);
@@ -74,6 +74,8 @@ pub fn init(allocator: std.mem.Allocator, thread_safe: bool, rtq_min_capacity: u
 }
 
 pub fn release(self: *Loop) void {
+    if (self.closed) @panic("Loop is already closed");
+
     inline for (&self.ready_tasks_arenas) |*ready_tasks_arena| {
         ready_tasks_arena.deinit();
     }
@@ -81,10 +83,7 @@ pub fn release(self: *Loop) void {
     const delayed_tasks_btree = self.delayed_tasks.btree;
     while (delayed_tasks_btree.pop(null) != null) {}
     delayed_tasks_btree.release() catch unreachable;
-
-    const allocator = self.allocator;
-
-    allocator.destroy(self);
+    self.closed = true;
 }
 
 

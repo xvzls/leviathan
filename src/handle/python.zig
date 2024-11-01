@@ -78,23 +78,78 @@ fn handle_new(
     return @ptrCast(self);
 }
 
-fn handle_dealloc(self: ?*PythonHandleObject) void {
-    if (utils.check_leviathan_python_object(self.?, LEVIATHAN_HANDLE_MAGIC)) {
+fn handle_traverse(self: ?*PythonHandleObject, visit: python_c.visitproc, arg: ?*anyopaque) callconv(.C) c_int {
+    const instance = self.?;
+    if (utils.check_leviathan_python_object(instance, LEVIATHAN_HANDLE_MAGIC)) {
+        return -1;
+    }
+
+    const objects = .{
+        instance.exception_handler,
+        instance.contextvars,
+        instance.py_callback,
+        instance.args
+    };
+    
+    inline for (objects) |object| {
+        if (object) |obj| {
+            const ret = visit.?(obj, arg);
+            if (ret != 0) {
+                return ret;
+            }
+        }
+    }
+
+    if (instance.py_loop) |loop| {
+        const ret = visit.?(@ptrCast(loop), arg);
+        if (ret != 0) {
+            return ret;
+        }
+    }
+
+    return 0;
+}
+
+fn handle_clear(self: ?*PythonHandleObject) callconv(.C) c_int {
+    const py_handle = self.?;
+    if (utils.check_leviathan_python_object(py_handle, LEVIATHAN_HANDLE_MAGIC)) {
         @panic("Invalid Leviathan's object");
     }
-    const py_handle = self.?;
+
     if (py_handle.handle_obj) |handle| {
         allocator.destroy(handle);
+        py_handle.handle_obj = null;
     }
 
     python_c.Py_XDECREF(py_handle.contextvars);
-    python_c.Py_XDECREF(py_handle.py_callback);
-    python_c.Py_XDECREF(@ptrCast(py_handle.py_loop));
-    python_c.Py_XDECREF(py_handle.args);
-    python_c.Py_XDECREF(py_handle.exception_handler);
+    py_handle.contextvars = null;
 
-    const @"type": *python_c.PyTypeObject = @ptrCast(python_c.Py_TYPE(@ptrCast(self.?)) orelse unreachable);
-    @"type".tp_free.?(@ptrCast(self.?));
+    python_c.Py_XDECREF(py_handle.py_callback);
+    py_handle.py_callback = null;
+
+    python_c.Py_XDECREF(@ptrCast(py_handle.py_loop));
+    py_handle.py_loop = null;
+
+    python_c.Py_XDECREF(py_handle.args);
+    py_handle.args = null;
+
+    python_c.Py_XDECREF(py_handle.exception_handler);
+    py_handle.exception_handler = null;
+
+    return 0;
+}
+
+fn handle_dealloc(self: ?*PythonHandleObject) void {
+    const instance = self.?;
+    if (utils.check_leviathan_python_object(instance, LEVIATHAN_HANDLE_MAGIC)) {
+        @panic("Invalid Leviathan's object");
+    }
+
+    python_c.PyObject_GC_UnTrack(instance);
+    _ = handle_clear(instance);
+
+    const @"type": *python_c.PyTypeObject = @ptrCast(python_c.Py_TYPE(@ptrCast(instance)) orelse unreachable);
+    @"type".tp_free.?(@ptrCast(instance));
 }
 
 inline fn z_handle_init(
@@ -142,11 +197,11 @@ inline fn z_handle_init(
         allocator, self, leviathan_loop.loop_obj.?, &callback_for_python_methods, self, (thread_safe != 0)
     );
     
-    self.exception_handler = python_c.Py_NewRef(exception_handler.?).?;
+    self.exception_handler = python_c.Py_NewRef(exception_handler.?) orelse return error.PythonError;
     self.py_callback = contextvars_run_func;
     self.py_loop = leviathan_loop;
-    self.contextvars = python_c.Py_NewRef(py_context.?).?;
-    self.args = python_c.Py_NewRef(py_callback_args.?).?;
+    self.contextvars = python_c.Py_NewRef(py_context.?) orelse return error.PythonError;
+    self.args = python_c.Py_NewRef(py_callback_args.?) orelse return error.PythonError;
 
     return 0;
 }
@@ -164,7 +219,7 @@ fn handle_get_context(self: ?*PythonHandleObject, _: ?PyObject) callconv(.C) ?Py
         return null;
     }
 
-    return python_c.Py_NewRef(self.?.contextvars.?).?;
+    return python_c.Py_NewRef(self.?.contextvars.?);
 }
 
 fn handle_cancel(self: ?*PythonHandleObject, _: ?PyObject) callconv(.C) ?PyObject {
@@ -224,9 +279,11 @@ pub var PythonHandleType = python_c.PyTypeObject{
     .tp_doc = "Leviathan's handle class\x00",
     .tp_basicsize = @sizeOf(PythonHandleObject),
     .tp_itemsize = 0,
-    .tp_flags = python_c.Py_TPFLAGS_DEFAULT | python_c.Py_TPFLAGS_BASETYPE,
+    .tp_flags = python_c.Py_TPFLAGS_DEFAULT | python_c.Py_TPFLAGS_BASETYPE | python_c.Py_TPFLAGS_HAVE_GC,
     .tp_new = &handle_new,
     .tp_init = @ptrCast(&handle_init),
+    .tp_traverse = @ptrCast(&handle_traverse),
+    .tp_clear = @ptrCast(&handle_clear),
     .tp_dealloc = @ptrCast(&handle_dealloc),
     .tp_methods = @constCast(PythonhandleMethods.ptr),
 };

@@ -8,7 +8,7 @@ const LEVIATHAN_FUTURE_MAGIC = constructors.LEVIATHAN_FUTURE_MAGIC;
 
 const utils = @import("../../utils/utils.zig");
 
-pub fn future_cancel(self: ?*PythonFutureObject, args: ?PyObject) callconv(.C) ?PyObject {
+pub fn future_cancel(self: ?*PythonFutureObject, args: ?PyObject, kwargs: ?PyObject) callconv(.C) ?PyObject {
     const instance = self.?;
     if (utils.check_leviathan_python_object(instance, LEVIATHAN_FUTURE_MAGIC)) {
         return null;
@@ -19,20 +19,26 @@ pub fn future_cancel(self: ?*PythonFutureObject, args: ?PyObject) callconv(.C) ?
     mutex.lock();
     defer mutex.unlock();
 
-    return switch (obj.status) {
-        .FINISHED,.CANCELED => python_c.get_py_false(),
-        else => blk: {
-            const cancel_msg_py_object = args.?;
-            var cancel_msg: ?[*:0]u8 = null;
-            if (python_c.PyArg_ParseTuple(cancel_msg_py_object, "|s:msg\x00", &cancel_msg) < 0) {
-                break :blk null;
-            }
-            instance.cancel_msg_py_object = cancel_msg_py_object;
-            instance.cancel_msg = cancel_msg;
-            obj.status = .CANCELED;
-            break :blk python_c.get_py_true();
-        }
-    };
+    switch (obj.status) {
+        .FINISHED,.CANCELED => return python_c.get_py_false(),
+        else => {}
+    }
+    const cancel_msg_py_object = args.?;
+
+    var kwlist: [2][*c]u8 = undefined;
+    kwlist[0] = @constCast("msg\x00");
+    kwlist[1] = null;
+
+    var cancel_msg: ?[*:0]u8 = null;
+
+    if (python_c.PyArg_ParseTupleAndKeywords(args, kwargs, "|s:msg\x00", @ptrCast(&kwlist), &cancel_msg) < 0) {
+        return null;
+    }
+
+    instance.cancel_msg_py_object = cancel_msg_py_object;
+    instance.cancel_msg = cancel_msg;
+    obj.status = .CANCELED;
+    return python_c.get_py_true();
 }
 
 pub fn future_cancelled(self: ?*PythonFutureObject, _: ?PyObject) callconv(.C) ?PyObject {

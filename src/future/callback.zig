@@ -24,15 +24,18 @@ pub fn create_python_handle(self: *Future, callback_data: PyObject) !*Handle {
         orelse return error.PythonError;
     errdefer python_c.Py_DECREF(py_callback_info);
 
+    const py_loop = self.loop.?.py_loop.?;
+
     const args: PyObject = python_c.Py_BuildValue(
-        "(OOOp)\x00", py_callback_info, self.loop.?.py_loop.?, py_context,
-        @as(c_int, 0)
+        "(OOOOp)\x00", py_callback_info, py_loop, py_context.?,
+        py_loop.exception_handler.?, @as(c_int, 0)
     ) orelse return error.PythonError;
     defer python_c.Py_DECREF(args);
 
-    const py_handle: *Handle.PythonHandleObject = python_c.PyObject_CallObject(
-        @ptrCast(Handle.PythonHandleType), args
-    ) orelse return error.PythonError;
+    const py_handle: *Handle.PythonHandleObject = @ptrCast(
+        python_c.PyObject_CallObject(@ptrCast(&Handle.PythonHandleType), args)
+            orelse return error.PythonError
+    );
 
     return py_handle.handle_obj.?;
 }
@@ -99,6 +102,10 @@ pub fn remove_done_callback(self: *Future, callback_id: u64, callback_type: Call
         @ptrCast(callbacks_btree.search(callback_id, null) orelse return error.CallbackNotFound)
     );
     const handle: *Handle = @alignCast(@ptrCast(callback_node.data.?));
+    if (handle.cancelled) {
+        return 0;
+    }
+
     const removed_count = handle.repeat;
     handle.cancelled = true;
 
@@ -115,11 +122,7 @@ fn release_future_callback(_: *Handle, data: ?*anyopaque) bool {
     return false;
 }
 
-pub fn call_done_callbacks(self: *Future, release: bool) !void {
-    const mutex = &self.mutex;
-    mutex.lock();
-    defer mutex.unlock();
-
+pub inline fn call_done_callbacks(self: *Future, release: bool) !void {
     if (self.status != .PENDING) return error.FutureAlreadyFinished;
 
     const loop = self.loop.?;
@@ -134,4 +137,12 @@ pub fn call_done_callbacks(self: *Future, release: bool) !void {
     }
 
     self.status = .FINISHED;
+}
+
+pub inline fn call_done_callbacks_thread_safe(self: *Future, release: bool) !void {
+    const mutex = &self.mutex;
+    mutex.lock();
+    defer mutex.unlock();
+
+    try self.call_done_callbacks(release);
 }

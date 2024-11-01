@@ -16,9 +16,13 @@ class Handle(asyncio.Handle):
 		if leviathan_loop is None:
 			raise ValueError("The given loop is not a leviathan event loop")
 
+		exception_handler = getattr(loop, "_exception_handler", None)
+		if exception_handler is None:
+			raise ValueError("The given loop is not a leviathan event loop")
+
 		callback_info = (callback, *args)
 		handle_leviathan_class = _Handle(
-			callback_info, leviathan_loop, context, thread_safe
+			callback_info, leviathan_loop, context, exception_handler, thread_safe
 		)
 		self._handle_leviathan_class = handle_leviathan_class
 		self._loop = loop

@@ -17,9 +17,9 @@ pub const PythonFutureObject = extern struct {
 
     future_obj: ?*Future,
 
-    asyncio_module: PyObject,
-    invalid_state_exc: PyObject,
-    cancelled_error_exc: PyObject,
+    asyncio_module: ?PyObject,
+    invalid_state_exc: ?PyObject,
+    cancelled_error_exc: ?PyObject,
 
     py_loop: ?*Loop.constructors.PythonLoopObject,
     exception: ?PyObject,
@@ -73,28 +73,86 @@ pub fn future_new(
     return @ptrCast(self);
 }
 
+pub fn future_traverse(self: ?*PythonFutureObject, visit: python_c.visitproc, arg: ?*anyopaque) callconv(.C) c_int {
+    const instance = self.?;
+    if (utils.check_leviathan_python_object(instance, LEVIATHAN_FUTURE_MAGIC)) {
+        return -1;
+    }
+
+    const objects = .{
+        instance.asyncio_module,
+        instance.invalid_state_exc,
+        instance.cancelled_error_exc,
+
+        instance.exception_tb,
+        instance.exception,
+        instance.cancel_msg_py_object,
+    };
+    inline for (objects) |object| {
+        if (object) |obj| {
+            const ret = visit.?(obj, arg);
+            if (ret != 0) {
+                return ret;
+            }
+        }
+    }
+
+    if (instance.py_loop) |loop| {
+        const ret = visit.?(@ptrCast(loop), arg);
+        if (ret != 0) {
+            return ret;
+        }
+    }
+
+    return 0;
+}
+
+pub fn future_clear(self: ?*PythonFutureObject) callconv(.C) c_int {
+    const py_future = self.?;
+    if (utils.check_leviathan_python_object(py_future, LEVIATHAN_FUTURE_MAGIC)) {
+        @panic("Invalid Leviathan's object");
+    }
+
+    if (py_future.future_obj) |future_obj| {
+        future_obj.release();
+        py_future.future_obj = null;
+    }
+
+    python_c.Py_XDECREF(@ptrCast(py_future.py_loop));
+    py_future.py_loop = null;
+
+    python_c.Py_XDECREF(py_future.exception);
+    py_future.exception = null;
+
+    python_c.Py_XDECREF(py_future.exception_tb);
+    py_future.exception_tb = null;
+
+    python_c.Py_XDECREF(py_future.cancel_msg_py_object);
+    py_future.cancel_msg = null;
+
+    python_c.Py_DECREF(py_future.invalid_state_exc);
+    py_future.invalid_state_exc = null;
+
+    python_c.Py_DECREF(py_future.cancelled_error_exc);
+    py_future.cancelled_error_exc = null;
+
+    python_c.Py_DECREF(py_future.asyncio_module);
+    py_future.asyncio_module = null;
+
+    return 0;
+}
+
 pub fn future_dealloc(self: ?*PythonFutureObject) callconv(.C) void {
+    const instance = self.?;
     if (utils.check_leviathan_python_object(self.?, LEVIATHAN_FUTURE_MAGIC)) {
         @panic("Invalid Leviathan's object");
     }
-    const py_future = self.?;
-    if (py_future.future_obj) |future_obj| {
-        future_obj.release();
-    }
 
+    python_c.PyObject_GC_UnTrack(instance);
+    _ = future_clear(instance);
 
-    python_c.Py_XDECREF(@ptrCast(py_future.py_loop));
-    python_c.Py_XDECREF(py_future.exception);
-    python_c.Py_XDECREF(py_future.exception_tb);
-    python_c.Py_XDECREF(py_future.cancel_msg_py_object);
-
-    python_c.Py_DECREF(py_future.invalid_state_exc);
-    python_c.Py_DECREF(py_future.cancelled_error_exc);
-    python_c.Py_DECREF(py_future.asyncio_module);
-
-
-    const @"type": *python_c.PyTypeObject = @ptrCast(python_c.Py_TYPE(@ptrCast(self.?)) orelse unreachable);
-    @"type".tp_free.?(@ptrCast(self.?));
+    const @"type": *python_c.PyTypeObject = @ptrCast(python_c.Py_TYPE(@ptrCast(instance)) orelse unreachable);
+    @"type".tp_free.?(@ptrCast(instance));
 }
 
 inline fn z_future_init(
@@ -108,7 +166,7 @@ inline fn z_future_init(
     var py_loop: ?PyObject = null;
     var thread_safe: u8 = 0;
 
-    if (python_c.PyArg_ParseTupleAndKeywords(args, kwargs, "OB", @ptrCast(&kwlist), &py_loop, &thread_safe) < 0) {
+    if (python_c.PyArg_ParseTupleAndKeywords(args, kwargs, "OB\x00", @ptrCast(&kwlist), &py_loop, &thread_safe) < 0) {
         return error.PythonError;
     }
 
@@ -119,7 +177,7 @@ inline fn z_future_init(
     }
 
     self.future_obj = try Future.init(allocator, (thread_safe != 0), leviathan_loop.loop_obj.?);
-    self.future_obj = self;
+    self.future_obj.?.py_future = self;
     python_c.Py_INCREF(@ptrCast(leviathan_loop));
     self.py_loop = leviathan_loop;
 

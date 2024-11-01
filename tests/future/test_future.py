@@ -48,3 +48,17 @@ def test_cancelling() -> None:
 		assert future.done()
 	finally:
 		loop.close()
+
+
+def test_cancelling_with_message() -> None:
+	loop = Loop()
+	try:
+		future = Future[Any](loop=loop)
+		future.cancel(msg="test")
+		assert future.cancelled()
+		assert future.done()
+		with pytest.raises(asyncio.CancelledError) as exc_info:
+			future.result()
+		assert exc_info.value.args[0] == "test"
+	finally:
+		loop.close()

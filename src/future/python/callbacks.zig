@@ -7,11 +7,11 @@ const LEVIATHAN_FUTURE_MAGIC = constructors.LEVIATHAN_FUTURE_MAGIC;
 
 const utils = @import("../../utils/utils.zig");
 
-fn z_future_add_done_callback(self: *PythonFutureObject, args: PyObject) !?PyObject {
+fn z_future_add_done_callback(self: *PythonFutureObject, args: PyObject) !PyObject {
     var callback_id: u64 = undefined;
     var callback_data: ?PyObject = null;
 
-    if (python_c.PyArg_ParseTuple(args.?, "KO\x00", &callback_id, &callback_data) < 0) {
+    if (python_c.PyArg_ParseTuple(args, "KO\x00", &callback_id, &callback_data) < 0) {
         return error.PythonError;
     }
 
@@ -23,7 +23,7 @@ fn z_future_add_done_callback(self: *PythonFutureObject, args: PyObject) !?PyObj
     switch (obj.status) {
         .PENDING => try obj.add_done_callback(null, callback_data, callback_id, .Python),
         else => {
-            const handle = try obj.create_python_handle(callback_data);
+            const handle = try obj.create_python_handle(callback_data.?);
             try obj.loop.?.call_soon_threadsafe(handle);
         }
     }

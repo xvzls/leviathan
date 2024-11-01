@@ -51,9 +51,11 @@ pub var PythonLoopType = python_c.PyTypeObject{
     .tp_doc = "Leviathan's loop class\x00",
     .tp_basicsize = @sizeOf(constructors.PythonLoopObject),
     .tp_itemsize = 0,
-    .tp_flags = python_c.Py_TPFLAGS_DEFAULT | python_c.Py_TPFLAGS_BASETYPE,
+    .tp_flags = python_c.Py_TPFLAGS_DEFAULT | python_c.Py_TPFLAGS_BASETYPE | python_c.Py_TPFLAGS_HAVE_GC,
     .tp_new = &constructors.loop_new,
     .tp_init = @ptrCast(&constructors.loop_init),
+    .tp_traverse = @ptrCast(&constructors.loop_traverse),
+    .tp_clear = @ptrCast(&constructors.loop_clear),
     .tp_dealloc = @ptrCast(&constructors.loop_dealloc),
     .tp_methods = @constCast(PythonLoopMethods.ptr)
 };

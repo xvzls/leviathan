@@ -32,12 +32,18 @@ inline fn call_once(self: *Loop) bool {
         return false;
     }
 
+    var should_stop: bool = false;
     while (_node) |node| {
         const handle: *Handle = @alignCast(@ptrCast(node.data.?));
+        if (should_stop) {
+            const handle_mutex = &handle.mutex;
+            handle_mutex.lock();
+            handle.cancelled = true;
+            handle_mutex.unlock();
+        }
+
         if (handle.run_callback()) {
-            const std = @import("std");
-            std.log.warn("Stopping", .{});
-            return false;
+            should_stop = true;
         }
 
         _node = node.next;

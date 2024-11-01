@@ -5,6 +5,7 @@ const utils = @import("../../utils/utils.zig");
 const allocator = utils.allocator;
 
 const Loop = @import("../main.zig");
+const Handle = @import("../../handle/main.zig");
 
 const constructors = @import("constructors.zig");
 const PythonLoopObject = constructors.PythonLoopObject;
@@ -81,14 +82,33 @@ pub fn loop_close(self: ?*PythonLoopObject, _: ?PyObject) callconv(.C) ?PyObject
     const loop_obj = instance.loop_obj.?;
 
     const mutex = &loop_obj.mutex;
-    mutex.lock();
-    defer mutex.unlock();
+    {
+        mutex.lock();
+        defer mutex.unlock();
 
-    if (loop_obj.running) {
-        utils.put_python_runtime_error_message("Loop is running\x00");
-        return null;
+        if (loop_obj.running) {
+            utils.put_python_runtime_error_message("Loop is running\x00");
+            return null;
+        }
+
+        const queue = &loop_obj.ready_tasks_queues[loop_obj.ready_tasks_queue_to_use];
+        var node = queue.first;
+        while (node) |n| {
+            const handle: *Handle = @alignCast(@ptrCast(n.data.?));
+            const handle_mutex = &handle.mutex;
+            handle_mutex.lock();
+            handle.cancelled = true;
+            handle_mutex.unlock();
+
+            node = n.next;
+        }
     }
 
-    loop_obj.closed = true;
+    loop_obj.run_forever() catch return null;
+
+    mutex.lock();
+    loop_obj.release();
+    mutex.unlock();
+
     return python_c.get_py_none();
 }
