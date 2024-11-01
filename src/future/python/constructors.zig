@@ -119,6 +119,7 @@ inline fn z_future_init(
     }
 
     self.future_obj = try Future.init(allocator, (thread_safe != 0), leviathan_loop.loop_obj.?);
+    self.future_obj = self;
     python_c.Py_INCREF(@ptrCast(leviathan_loop));
     self.py_loop = leviathan_loop;
 

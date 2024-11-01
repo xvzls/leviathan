@@ -1,5 +1,5 @@
 
-from .leviathan_zig import Handle as _Handle # type: ignore
+from .leviathan_zig import Handle as _Handle
 
 from contextvars import Context, copy_context
 from typing import Any, Callable, Sequence
@@ -7,7 +7,7 @@ import asyncio
 
 
 class Handle(asyncio.Handle):
-	def __init__(self, callback: Callable[..., object], args: Sequence[Any], loop: asyncio.AbstractEventLoop,
+	def __init__(self, callback: Callable[..., None], args: Sequence[Any], loop: asyncio.AbstractEventLoop,
 			  context: Context | None = None, thread_safe: bool = False) -> None:
 		if context is None:
 			context = copy_context()
@@ -18,13 +18,20 @@ class Handle(asyncio.Handle):
 
 		callback_info = (callback, *args)
 		handle_leviathan_class = _Handle(
-			callback_info, leviathan_loop, context, loop.call_exception_handler, thread_safe
+			callback_info, leviathan_loop, context, thread_safe
 		)
 		self._handle_leviathan_class = handle_leviathan_class
+		self._loop = loop
 
 		for x in dir(handle_leviathan_class):
-			if x.startswith("__"):
+			if x.startswith("_"):
 				continue
 			obj = getattr(handle_leviathan_class, x)
 			if callable(obj):
 				setattr(self, x, obj)
+
+	# def _exception_handler(self, exc: Exception) -> None:
+	# 	context = {
+	# 		"message": str(exc)
+	# 	}
+	# 	self._loop.call_exception_handler(context)

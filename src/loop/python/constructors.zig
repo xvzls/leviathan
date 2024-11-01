@@ -85,6 +85,7 @@ inline fn z_loop_init(
     }
 
     self.loop_obj = try Loop.init(allocator, (thread_safe != 0), @intCast(ready_tasks_queue_min_bytes_capacity));
+    self.loop_obj.?.py_loop = self;
     return 0;
 }
 

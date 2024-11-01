@@ -1,4 +1,5 @@
-from typing import Any, TypeVar, Generic
+from typing import TypeVar, Generic, Callable
+from contextvars import Context
 
 _T = TypeVar('_T')
 
@@ -9,8 +10,13 @@ class Future(Generic[_T]):
 	def cancel(self) -> None: ...
 	def cancelled(self) -> bool: ...
 
+
 class Handle:
-	...
+	def __init__(
+		self, callback_info: tuple[Callable[..., None], ...], loop: Loop,
+		context: Context, thread_safe: bool
+	) -> None: ...
+
 
 class Loop:
 	def __init__(self, ready_tasks_queue_min_bytes_capacity: int, thread_safe: bool) -> None: ...

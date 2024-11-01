@@ -7,41 +7,38 @@ const LEVIATHAN_FUTURE_MAGIC = constructors.LEVIATHAN_FUTURE_MAGIC;
 
 const utils = @import("../../utils/utils.zig");
 
+fn z_future_add_done_callback(self: *PythonFutureObject, args: PyObject) !?PyObject {
+    var callback_id: u64 = undefined;
+    var callback_data: ?PyObject = null;
+
+    if (python_c.PyArg_ParseTuple(args.?, "KO\x00", &callback_id, &callback_data) < 0) {
+        return error.PythonError;
+    }
+
+    const obj = self.future_obj.?;
+    const mutex = &obj.mutex;
+    mutex.lock();
+    defer mutex.unlock();
+
+    switch (obj.status) {
+        .PENDING => try obj.add_done_callback(null, callback_data, callback_id, .Python),
+        else => {
+            const handle = try obj.create_python_handle(callback_data);
+            try obj.loop.?.call_soon_threadsafe(handle);
+        }
+    }
+
+    return python_c.get_py_none();
+}
+
 pub fn future_add_done_callback(self: ?*PythonFutureObject, args: ?PyObject) callconv(.C) ?PyObject {
     const instance = self.?;
     if (utils.check_leviathan_python_object(instance, LEVIATHAN_FUTURE_MAGIC)) {
         return null;
     }
 
-    var callback_id: u64 = undefined;
-    var callback_data: ?PyObject = null;
-
-    if (python_c.PyArg_ParseTuple(args.?, "KO\x00", &callback_id, &callback_data) < 0) {
-        return null;
-    }
-
-    const obj = instance.future_obj.?;
-    const mutex = &obj.mutex;
-    mutex.lock();
-    defer mutex.unlock();
-
-    switch (obj.status) {
-        .PENDING => {
-             obj.add_done_callback(null, args.?, callback_id, .Python) catch |err| switch (err) {
-                error.PythonError => return null,
-                else => {
-                    const err_trace = @errorReturnTrace();
-                    utils.print_error_traces(err_trace, err);
-                    utils.put_python_runtime_error_message(@errorName(err));
-                }
-            };
-        },
-        else => {
-            // TODO
-        }
-    }
-
-    return python_c.get_py_none();
+    const ret = utils.execute_zig_function(z_future_add_done_callback, .{instance, args.?});
+    return ret;
 }
 
 pub fn future_remove_done_callback(self: ?*PythonFutureObject, args: ?PyObject) callconv(.C) ?PyObject {

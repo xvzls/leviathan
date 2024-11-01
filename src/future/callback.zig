@@ -6,29 +6,39 @@ const Handle = @import("../handle/main.zig");
 const BTree = @import("../utils/btree/btree.zig");
 const LinkedList = @import("../utils/linked_list.zig");
 const python_c = @import("../utils/python_c.zig");
+const PyObject = *python_c.PyObject;
 
 
 pub const CallbackType = enum { Python, Zig };
 pub const FutureCallback = Handle.HandleCallback;
 
-inline fn create_handle_for_zig_callback(
-    allocator: std.mem.Allocator, future: *Future, callback: FutureCallback, args: ?*anyopaque
-) !*Handle {
-    const handle = try Handle.init(allocator, null, future.loop.?, callback, args orelse future, false);
-    return handle;
-}
+pub fn create_python_handle(self: *Future, callback_data: PyObject) !*Handle {
+    var py_callback: ?PyObject = null;
+    var py_context: ?PyObject = null;
+    const ret = python_c.PyArg_ParseTuple(callback_data, "(OO)\x00", &py_callback, &py_context);
+    if (ret < 0) {
+        return error.PythonError;
+    }
 
-fn create_handle_for_python_callback(args: *python_c.PyObject) !*Handle {
-    const py_handle: *Handle.PythonHandleObject = @ptrCast(
-        python_c.PyObject_CallObject(@ptrCast(&Handle.PythonHandleType), @ptrCast(args))
-            orelse return error.PythonError
-    );
+    const py_callback_info = python_c.Py_BuildValue("(OO)\x00", py_callback, self.py_future.?)
+        orelse return error.PythonError;
+    errdefer python_c.Py_DECREF(py_callback_info);
+
+    const args: PyObject = python_c.Py_BuildValue(
+        "(OOOp)\x00", py_callback_info, self.loop.?.py_loop.?, py_context,
+        @as(c_int, 0)
+    ) orelse return error.PythonError;
+    defer python_c.Py_DECREF(args);
+
+    const py_handle: *Handle.PythonHandleObject = python_c.PyObject_CallObject(
+        @ptrCast(Handle.PythonHandleType), args
+    ) orelse return error.PythonError;
 
     return py_handle.handle_obj.?;
 }
 
 pub fn add_done_callback(
-    self: *Future, callback: ?FutureCallback, args: ?*anyopaque, callback_id: u64, callback_type: CallbackType
+    self: *Future, callback: ?FutureCallback, data: ?*anyopaque, callback_id: u64, callback_type: CallbackType
 ) !void {
     const mutex = &self.mutex;
     mutex.lock();
@@ -48,12 +58,17 @@ pub fn add_done_callback(
     );
     if (existing_handle_node) |node| {
         const existing_handle: *Handle = @alignCast(@ptrCast(node.data.?));
-        existing_handle.repeat +|= 1;
+        if (existing_handle.cancelled) {
+            existing_handle.repeat = 1;
+            existing_handle.cancelled = false;
+        }else{
+            existing_handle.repeat +|= 1;
+        }
     }else{
         const allocator = self.callbacks_arena_allocator;
         const handle = switch (callback_type) {
-            .Python => try create_handle_for_python_callback(@alignCast(@ptrCast(args.?))),
-            .Zig => try create_handle_for_zig_callback(allocator, self, callback.?, args)
+            .Python => try self.create_python_handle(@alignCast(@ptrCast(data.?))),
+            .Zig => try Handle.init(allocator, null, self.loop.?, callback.?, self, false)
         };
         errdefer {
             switch (callback_type) {
@@ -75,38 +90,48 @@ pub fn remove_done_callback(self: *Future, callback_id: u64, callback_type: Call
 
     if (self.status != .PENDING) return error.FutureAlreadyFinished;
 
-    const callbacks_array = &self.callbacks_array;
     const callbacks_btree = switch (callback_type) {
         .Python => self.python_callbacks,
         .Zig => self.zig_callbacks
     };
 
     const callback_node: LinkedList.Node = @alignCast(
-        @ptrCast(callbacks_btree.delete(callback_id) orelse return error.CallbackNotFound)
+        @ptrCast(callbacks_btree.search(callback_id, null) orelse return error.CallbackNotFound)
     );
     const handle: *Handle = @alignCast(@ptrCast(callback_node.data.?));
-    const callbacks_removed = handle.repeat;
+    const removed_count = handle.repeat;
+    handle.cancelled = true;
 
-    const n_prev = callback_node.prev;
-    const n_next = callback_node.next;
+    return removed_count;
+}
 
-    if (n_prev) |prev| {
-        prev.next = n_next;
+fn release_future_callback(_: *Handle, data: ?*anyopaque) bool {
+    const future: *Future = @alignCast(@ptrCast(data.?));
+    if (future.py_future) |py_future| {
+        python_c.Py_DECREF(py_future);
     }else{
-        callbacks_array.first = n_next;
+        future.release();
+    }
+    return false;
+}
+
+pub fn call_done_callbacks(self: *Future, release: bool) !void {
+    const mutex = &self.mutex;
+    mutex.lock();
+    defer mutex.unlock();
+
+    if (self.status != .PENDING) return error.FutureAlreadyFinished;
+
+    const loop = self.loop.?;
+    const loop_mutex = &loop.mutex;
+    loop_mutex.lock();
+    defer loop_mutex.unlock();
+
+    loop.extend_ready_tasks(&self.callbacks_array);
+
+    if (release) {
+        loop.call_soon_without_handle(&release_future_callback, self);
     }
 
-    if (n_next) |next| {
-        next.prev = n_prev;
-    }else{
-        callbacks_array.last = n_prev;
-    }
-
-    const allocator = self.callbacks_arena_allocator;
-    switch (callback_type) {
-        .Python => python_c.Py_DECREF(@ptrCast(handle.py_handle.?)),
-        .Zig => allocator.destroy(handle)
-    }
-    allocator.destroy(callback_node);
-    return callbacks_removed;
+    self.status = .FINISHED;
 }

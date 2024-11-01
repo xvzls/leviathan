@@ -1,6 +1,8 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
+const python_c = @import("../utils/python_c.zig");
+
 const LinkedList = @import("../utils/linked_list.zig");
 const BTree = @import("../utils/btree/btree.zig");
 const NoOpMutex = @import("../utils/no_op_mutex.zig");
@@ -34,6 +36,8 @@ thread_safe: bool,
 running: bool = false,
 stopping: bool = false,
 closed: bool = false,
+
+py_loop: ?*python_c.PyObject = null,
 
 pub fn init(allocator: std.mem.Allocator, thread_safe: bool, rtq_min_capacity: usize) !*Loop {
     const loop = try allocator.create(Loop);

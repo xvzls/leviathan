@@ -16,6 +16,7 @@ allocator: std.mem.Allocator,
 result: ?*anyopaque = null,
 status: FutureStatus = .PENDING,
 
+thread_safe: bool,
 mutex: std.Thread.Mutex,
 
 callbacks_arena: std.heap.ArenaAllocator,
@@ -23,8 +24,9 @@ callbacks_arena_allocator: std.mem.Allocator = undefined,
 zig_callbacks: *BTree = undefined,
 python_callbacks: *BTree = undefined,
 callbacks_array: LinkedList = undefined,
-
 loop: ?*Loop,
+
+py_future: ?*Future.constructors.PythonFutureObject = null,
 
 
 pub fn init(allocator: std.mem.Allocator, thread_safe: bool, loop: *Loop) !*Future {
@@ -44,6 +46,7 @@ pub fn init(allocator: std.mem.Allocator, thread_safe: bool, loop: *Loop) !*Futu
     fut.* = .{
         .allocator = allocator,
         .loop = loop,
+        .thread_safe = thread_safe,
         .mutex = mutex,
         .callbacks_arena = std.heap.ArenaAllocator.init(allocator)
     };
