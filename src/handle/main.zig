@@ -23,13 +23,14 @@ pub fn init(
     const handle = try allocator.create(Handle);
 
     const mutex = blk: {
-        if (thread_safe or builtin.mode == .Debug) {
+        _ = thread_safe;
+        // if (thread_safe or builtin.mode == .Debug) {
             break :blk std.Thread.Mutex{};
-        } else {
-            break :blk std.Thread.Mutex{
-                .impl = NoOpMutex{},
-            };
-        }
+        // } else {
+        //     break :blk std.Thread.Mutex{
+        //         .impl = NoOpMutex{},
+        //     };
+        // }
     };
     handle.* = .{
         .allocator = allocator,

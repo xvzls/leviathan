@@ -7,7 +7,7 @@ const LEVIATHAN_FUTURE_MAGIC = constructors.LEVIATHAN_FUTURE_MAGIC;
 
 const utils = @import("../../utils/utils.zig");
 
-fn z_future_add_done_callback(self: *PythonFutureObject, args: PyObject) !PyObject {
+inline fn z_future_add_done_callback(self: *PythonFutureObject, args: PyObject) !PyObject {
     var callback_id: u64 = undefined;
     var callback_data: ?PyObject = null;
 

@@ -11,6 +11,8 @@ const constructors = @import("constructors.zig");
 const PythonLoopObject = constructors.PythonLoopObject;
 const LEVIATHAN_LOOP_MAGIC = constructors.LEVIATHAN_LOOP_MAGIC;
 
+const std = @import("std");
+
 
 pub fn loop_run_forever(self: ?*PythonLoopObject, _: ?PyObject) callconv(.C) ?PyObject {
     const instance = self.?;

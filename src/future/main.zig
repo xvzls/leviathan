@@ -34,13 +34,13 @@ pub fn init(allocator: std.mem.Allocator, thread_safe: bool, loop: *Loop) !*Futu
     errdefer allocator.destroy(fut);
 
     const mutex = blk: {
-        if (thread_safe or builtin.mode == .Debug) {
+        // if (thread_safe or builtin.mode == .Debug) {
             break :blk std.Thread.Mutex{};
-        } else {
-            break :blk std.Thread.Mutex{
-                .impl = NoOpMutex{},
-            };
-        }
+        // } else {
+        //     break :blk std.Thread.Mutex{
+        //         .impl = NoOpMutex{},
+        //     };
+        // }
     };
 
     fut.* = .{

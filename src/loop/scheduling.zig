@@ -6,7 +6,22 @@ const LinkedList = @import("../utils/linked_list.zig");
 
 pub inline fn call_soon(self: *Loop, handle: *Handle) !void {
     const queue = &self.ready_tasks_queues[self.ready_tasks_queue_to_use];
-    try queue.append(handle);
+
+    if (queue.last) |last| {
+        const events: *Loop.EventSet = @alignCast(@ptrCast(last.data.?));
+        const events_num = events.events_num;
+        if (events_num < Loop.MaxEvents) {
+            events.events[events_num] = handle;
+            events.events_num = events_num + 1;
+            return;
+        }
+    }
+    const allocator = queue.allocator;
+    const events: *Loop.EventSet = try allocator.create(Loop.EventSet);
+    events.events_num = 1;
+    events.events[0] = handle;
+
+    try queue.append(events);
 }
 
 pub inline fn call_soon_without_handle(

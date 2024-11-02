@@ -64,19 +64,16 @@ fn get_func_return_type(func: anytype) type {
 }
 
 pub inline fn execute_zig_function(func: anytype, args: anytype) get_func_return_type(func) {
-    const ret = @call(.auto, func, args);
-    if (ret) |v| {
-        return v;
-    }else |err| {
+    return @call(.auto, func, args) catch |err| {
         if (err != error.PythonError) {
             const err_trace = @errorReturnTrace();
             print_error_traces(err_trace, err);
 
             put_python_runtime_error_message(@errorName(err));
         }
-    }
-    if (@typeInfo(get_func_return_type(func)) == .Int) {
-        return -1;
-    }
-    return null;
+        if (@typeInfo(get_func_return_type(func)) == .Int) {
+            return -1;
+        }
+        return null;
+    };
 }

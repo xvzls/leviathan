@@ -22,9 +22,7 @@ pub fn build(b: *std.Build) void {
     python_lib.addIncludePath(.{
         .cwd_relative = "/usr/include/"
     });
-    python_lib.addLibraryPath(.{
-        .cwd_relative = "/usr/lib/libpython3.12.so.1.0"
-    });
+    python_lib.linkSystemLibrary("python3.12");
     python_lib.linkLibC();
 
     const compile_python_lib = b.addInstallArtifact(python_lib, .{});

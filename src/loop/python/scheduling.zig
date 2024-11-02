@@ -11,8 +11,9 @@ const constructors = @import("constructors.zig");
 const PythonLoopObject = constructors.PythonLoopObject;
 const LEVIATHAN_LOOP_MAGIC = constructors.LEVIATHAN_LOOP_MAGIC;
 
+const std = @import("std");
 
-fn z_loop_call_soon(self: *PythonLoopObject, args: PyObject) !PyObject {
+inline fn z_loop_call_soon(self: *PythonLoopObject, args: PyObject) !PyObject {
     var kwlist: [2][*c]u8 = undefined;
     kwlist[0] = @constCast("handle\x00");
     kwlist[1] = null;
@@ -59,6 +60,5 @@ pub fn loop_call_soon(self: ?*PythonLoopObject, args: ?PyObject) callconv(.C) ?P
         return null;
     }
 
-    const ret = utils.execute_zig_function(z_loop_call_soon, .{instance, args.?});
-    return ret;
+    return utils.execute_zig_function(z_loop_call_soon, .{instance, args.?});
 }

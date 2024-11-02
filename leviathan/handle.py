@@ -16,7 +16,7 @@ class Handle(asyncio.Handle):
 		if leviathan_loop is None:
 			raise ValueError("The given loop is not a leviathan event loop")
 
-		exception_handler = getattr(loop, "_exception_handler", None)
+		exception_handler = getattr(loop, "_call_exception_handler", None)
 		if exception_handler is None:
 			raise ValueError("The given loop is not a leviathan event loop")
 
@@ -33,9 +33,3 @@ class Handle(asyncio.Handle):
 			obj = getattr(handle_leviathan_class, x)
 			if callable(obj):
 				setattr(self, x, obj)
-
-	# def _exception_handler(self, exc: Exception) -> None:
-	# 	context = {
-	# 		"message": str(exc)
-	# 	}
-	# 	self._loop.call_exception_handler(context)

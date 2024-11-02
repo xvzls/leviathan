@@ -21,4 +21,37 @@ pub inline fn get_py_none() *Python.PyObject {
     return py_none_struct;
 }
 
+pub inline fn py_incref(op: *Python.PyObject) void {
+    const new_refcnt = op.unnamed_0.ob_refcnt_split[0] + 1;
+    if (new_refcnt == 0) {
+        return;
+    }
+
+    op.unnamed_0.ob_refcnt_split[0] = new_refcnt;
+}
+
+pub inline fn py_decref(op: *Python.PyObject) void {
+    var ref = op.unnamed_0.ob_refcnt;
+    if (ref < 0) {
+        return;
+    }
+
+    ref -= 1;
+    op.unnamed_0.ob_refcnt = ref;
+    if (ref == 0) {
+        Python._Py_Dealloc(op);
+    }
+}
+
+pub inline fn py_xdecref(op: ?*Python.PyObject) void {
+    if (op) |o| {
+        py_decref(o);
+    }
+}
+
+pub inline fn py_newref(op: *Python.PyObject) *Python.PyObject {
+    Python.Py_INCREF(op);
+    return op;
+}
+
 const Python = @This();

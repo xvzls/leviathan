@@ -121,19 +121,19 @@ fn handle_clear(self: ?*PythonHandleObject) callconv(.C) c_int {
         py_handle.handle_obj = null;
     }
 
-    python_c.Py_XDECREF(py_handle.contextvars);
+    python_c.py_xdecref(py_handle.contextvars);
     py_handle.contextvars = null;
 
-    python_c.Py_XDECREF(py_handle.py_callback);
+    python_c.py_xdecref(py_handle.py_callback);
     py_handle.py_callback = null;
 
-    python_c.Py_XDECREF(@ptrCast(py_handle.py_loop));
+    python_c.py_xdecref(@ptrCast(py_handle.py_loop));
     py_handle.py_loop = null;
 
-    python_c.Py_XDECREF(py_handle.args);
+    python_c.py_xdecref(py_handle.args);
     py_handle.args = null;
 
-    python_c.Py_XDECREF(py_handle.exception_handler);
+    python_c.py_xdecref(py_handle.exception_handler);
     py_handle.exception_handler = null;
 
     return 0;
@@ -181,12 +181,12 @@ inline fn z_handle_init(
         utils.put_python_runtime_error_message("Invalid asyncio event loop. Only Leviathan's event loops are allowed\x00");
         return error.PythonError;
     }
-    python_c.Py_INCREF(py_loop.?);
-    errdefer python_c.Py_DECREF(py_loop.?);
+    python_c.py_incref(py_loop.?);
+    errdefer python_c.py_decref(py_loop.?);
 
     const contextvars_run_func: PyObject = python_c.PyObject_GetAttrString(py_context.?, "run\x00")
         orelse return error.PythonError;
-    errdefer python_c.Py_DECREF(contextvars_run_func);
+    errdefer python_c.py_decref(contextvars_run_func);
 
     if (python_c.PyCallable_Check(contextvars_run_func) < 0) {
         utils.put_python_runtime_error_message("Invalid contextvars run function\x00");
@@ -197,11 +197,11 @@ inline fn z_handle_init(
         allocator, self, leviathan_loop.loop_obj.?, &callback_for_python_methods, self, (thread_safe != 0)
     );
     
-    self.exception_handler = python_c.Py_NewRef(exception_handler.?) orelse return error.PythonError;
+    self.exception_handler = python_c.py_newref(exception_handler.?);
     self.py_callback = contextvars_run_func;
     self.py_loop = leviathan_loop;
-    self.contextvars = python_c.Py_NewRef(py_context.?) orelse return error.PythonError;
-    self.args = python_c.Py_NewRef(py_callback_args.?) orelse return error.PythonError;
+    self.contextvars = python_c.py_newref(py_context.?);
+    self.args = python_c.py_newref(py_callback_args.?);
 
     return 0;
 }
@@ -219,7 +219,7 @@ fn handle_get_context(self: ?*PythonHandleObject, _: ?PyObject) callconv(.C) ?Py
         return null;
     }
 
-    return python_c.Py_NewRef(self.?.contextvars.?);
+    return python_c.py_newref(self.?.contextvars.?);
 }
 
 fn handle_cancel(self: ?*PythonHandleObject, _: ?PyObject) callconv(.C) ?PyObject {

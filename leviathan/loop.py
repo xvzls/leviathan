@@ -15,7 +15,7 @@ class Loop(asyncio.AbstractEventLoop):
 		self._loop_leviathan_class = loop_leviathan_class
 
 		for x in dir(loop_leviathan_class):
-			if x.startswith("__"):
+			if x.startswith("_"):
 				continue
 			obj = getattr(loop_leviathan_class, x)
 			if callable(obj):

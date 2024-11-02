@@ -116,6 +116,11 @@ inline fn z_loop_init(
         return error.PythonError;
     }
 
+    if (python_c.PyCallable_Check(exception_handler.?) < 0) {
+        utils.put_python_runtime_error_message("Invalid exception handler\x00");
+        return error.PythonError;
+    }
+
     self.exception_handler = python_c.Py_NewRef(exception_handler.?) orelse return error.PythonError;
     errdefer python_c.Py_DECREF(exception_handler.?);
 

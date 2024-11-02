@@ -21,6 +21,13 @@ pub const EventType = enum {
     DELAYED
 };
 
+pub const MaxEvents = std.mem.page_size / @sizeOf(*Handle);
+
+pub const EventSet = struct {
+    events_num: u16 = 0,
+    events: [MaxEvents]*Handle = undefined,
+};
+
 allocator: std.mem.Allocator,
 
 ready_tasks_arenas: [2]std.heap.ArenaAllocator = undefined,
@@ -47,13 +54,13 @@ pub fn init(allocator: std.mem.Allocator, thread_safe: bool, rtq_min_capacity: u
         .allocator = allocator,
         .thread_safe = thread_safe,
         .mutex = blk: {
-            if (thread_safe or builtin.mode == .Debug) {
+            // if (thread_safe or builtin.mode == .Debug) {
                 break :blk std.Thread.Mutex{};
-            } else {
-                break :blk std.Thread.Mutex{
-                    .impl = NoOpMutex{},
-                };
-            }
+            // } else {
+            //     break :blk std.Thread.Mutex{
+            //         .impl = NoOpMutex{},
+            //     };
+            // }
         },
         .ready_tasks_queue_min_bytes_capacity = rtq_min_capacity,
         .delayed_tasks = .{
