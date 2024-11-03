@@ -6,7 +6,7 @@ const python_c = @import("../utils/python_c.zig");
 const NoOpMutex = @import("../utils/no_op_mutex.zig");
 const Loop = @import("../loop/main.zig");
 
-pub const HandleCallback = *const fn (*Handle, ?*anyopaque) bool;
+pub const HandleCallback = *const fn (*Handle, bool, ?*anyopaque) bool;
 
 allocator: std.mem.Allocator,
 mutex: std.Thread.Mutex,
@@ -20,23 +20,13 @@ py_handle: ?*Handle.PythonHandleObject,
 
 pub fn init(
     allocator: std.mem.Allocator, py_handle: ?*Handle.PythonHandleObject, loop: *Loop,
-    callback: ?HandleCallback, data: ?*anyopaque, thread_safe: bool
+    callback: ?HandleCallback, data: ?*anyopaque
 ) !*Handle {
     const handle = try allocator.create(Handle);
 
-    const mutex = blk: {
-        _ = thread_safe;
-        // if (thread_safe or builtin.mode == .Debug) {
-            break :blk std.Thread.Mutex{};
-        // } else {
-        //     break :blk std.Thread.Mutex{
-        //         .impl = NoOpMutex{},
-        //     };
-        // }
-    };
     handle.* = .{
         .allocator = allocator,
-        .mutex = mutex,
+        .mutex = std.Thread.Mutex{},
         .cancelled = false,
         .callback = callback,
         .data = data,
@@ -47,23 +37,25 @@ pub fn init(
     return handle;
 }
 
-pub inline fn run_callback(self: *Handle) bool {
+pub inline fn run_callback(self: *Handle, can_execute: bool) bool {
     var index: usize = 0;
     const limit = self.repeat;
     var should_stop: bool = false;
 
+    const can_execute_logic: bool = can_execute and !self.is_cancelled();
+
     if (self.py_handle) |py_handle| {
-        if (!self.cancelled) {
+        if (can_execute_logic) {
             while (!should_stop and index < limit) : (index += 1) {
                 should_stop = Handle.callback_for_python_methods(py_handle);
             }
-            python_c.py_decref(@ptrCast(py_handle));
         }
+        python_c.py_decref(@ptrCast(py_handle));
     }else{
         const callback = self.callback.?;
         const data = self.data.?;
         while (!should_stop and index < limit) : (index += 1) {
-            should_stop = callback(self, data);
+            should_stop = callback(self, can_execute_logic, data);
         }
     }
 
@@ -77,6 +69,14 @@ pub inline fn is_cancelled(self: *Handle) bool {
     defer mutex.unlock();
 
     return self.cancelled;
+}
+
+pub inline fn cancel(self: *Handle) void {
+    const mutex = &self.mutex;
+
+    mutex.lock();
+    self.cancelled = true;
+    mutex.unlock();
 }
 
 pub usingnamespace @import("python.zig");

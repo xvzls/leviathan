@@ -32,7 +32,6 @@ class ZigBuildCommand(build_ext):
 	def run(self) -> None:
 		print(f"Building Zig code in {zig_mode} mode...")
 		subprocess.check_call(["zig", "build", "install", f"-Doptimize={zig_mode}"])
-
 		self.copy_zig_files()
 
 	def copy_zig_files(self) -> None:
@@ -40,12 +39,18 @@ class ZigBuildCommand(build_ext):
 
 		print("Copying .so file...")
 		src_path = os.path.join(build_dir, "libleviathan.so")
+		src_path2 = os.path.join(build_dir, "libleviathan_single_thread.so")
 
 		dest_path = os.path.join("leviathan", "leviathan_zig.so")
+		dest_path2 = os.path.join("leviathan", "leviathan_zig_single_thread.so")
 		shutil.copyfile(src_path, dest_path)
+		shutil.copyfile(src_path2, dest_path2)
 
 		st = os.stat(dest_path)
 		os.chmod(dest_path, st.st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+		st = os.stat(dest_path2)
+		os.chmod(dest_path2, st.st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
 
 class ZigDevelopCommand(develop):

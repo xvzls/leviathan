@@ -36,7 +36,7 @@ inline fn initialize_leviathan_types() !void {
 
 inline fn deinitialize_leviathan_types() void {
     inline for (leviathan_types) |v| {
-        python_c.Py_DECREF(@ptrCast(v));
+        python_c.py_decref(@ptrCast(v));
     }
 }
 
@@ -44,7 +44,7 @@ inline fn initialize_python_module() !*python_c.PyObject {
     // errdefer deinitialize_leviathan_types();
 
     const module: *python_c.PyObject = python_c.PyModule_Create(&leviathan_module) orelse return error.PythonError;
-    errdefer python_c.Py_DECREF(module);
+    errdefer python_c.py_decref(module);
 
     const leviathan_modules_name = .{
         "Future\x00", "Loop\x00", "Handle\x00"
@@ -70,7 +70,23 @@ inline fn initialize_python_module() !*python_c.PyObject {
 }
 
 export fn PyInit_leviathan_zig() ?*python_c.PyObject {
-    initialize_leviathan_types() catch return null;
-    const module = initialize_python_module() catch return null;
-    return module;
+    if (builtin.single_threaded) {
+        utils.put_python_runtime_error_message("leviathan_zig is not supported in single-threaded mode\x00");
+        return null;
+    }else{
+        initialize_leviathan_types() catch return null;
+        const module = initialize_python_module() catch return null;
+        return module;
+    }
+}
+
+export fn PyInit_leviathan_zig_single_thread() ?*python_c.PyObject {
+    if (builtin.single_threaded) {
+        initialize_leviathan_types() catch return null;
+        const module = initialize_python_module() catch return null;
+        return module;
+    }else{
+        utils.put_python_runtime_error_message("leviathan_zig_single_thread is not supported in multi-threaded mode\x00");
+        return null;
+    }
 }

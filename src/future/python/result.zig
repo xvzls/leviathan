@@ -18,10 +18,6 @@ inline fn raise_cancel_exception(self: *PythonFutureObject) void {
 
 
 pub fn future_result(self: ?*PythonFutureObject, _: ?PyObject) callconv(.C) ?PyObject {
-    if (utils.check_leviathan_python_object(self.?, LEVIATHAN_FUTURE_MAGIC)) {
-        return null;
-    }
-
     const instance = self.?;
     const obj = instance.future_obj.?;
     const mutex = &obj.mutex;
@@ -57,10 +53,6 @@ pub fn future_result(self: ?*PythonFutureObject, _: ?PyObject) callconv(.C) ?PyO
 }
 
 pub fn future_exception(self: ?*PythonFutureObject, _: ?PyObject) callconv(.C) ?PyObject {
-    if (utils.check_leviathan_python_object(self.?, LEVIATHAN_FUTURE_MAGIC)) {
-        return null;
-    }
-
     const instance = self.?;
     const obj = instance.future_obj.?;
     const mutex = &obj.mutex;
@@ -87,10 +79,6 @@ pub fn future_exception(self: ?*PythonFutureObject, _: ?PyObject) callconv(.C) ?
 
 pub fn future_set_exception(self: ?*PythonFutureObject, args: ?PyObject) callconv(.C) ?PyObject {
     const instance = self.?;
-    if (utils.check_leviathan_python_object(instance, LEVIATHAN_FUTURE_MAGIC)) {
-        return null;
-    }
-
     const obj = instance.future_obj.?;
     const mutex = &obj.mutex;
     mutex.lock();
@@ -117,10 +105,6 @@ pub fn future_set_exception(self: ?*PythonFutureObject, args: ?PyObject) callcon
 
 pub fn future_set_result(self: ?*PythonFutureObject, args: ?PyObject) callconv(.C) ?PyObject {
     const instance = self.?;
-    if (utils.check_leviathan_python_object(instance, LEVIATHAN_FUTURE_MAGIC)) {
-        return null;
-    }
-
     const obj = instance.future_obj.?;
     const mutex = &obj.mutex;
     mutex.lock();
@@ -147,10 +131,6 @@ pub fn future_set_result(self: ?*PythonFutureObject, args: ?PyObject) callconv(.
 
 pub fn future_done(self: ?*PythonFutureObject, _: ?PyObject) callconv(.C) ?PyObject {
     const instance = self.?;
-    if (utils.check_leviathan_python_object(instance, LEVIATHAN_FUTURE_MAGIC)) {
-        return null;
-    }
-
     const obj = instance.future_obj.?;
     const mutex = &obj.mutex;
     mutex.lock();

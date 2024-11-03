@@ -49,19 +49,11 @@ pub fn loop_new(
 
 pub fn loop_traverse(self: ?*PythonLoopObject, visit: python_c.visitproc, arg: ?*anyopaque) callconv(.C) c_int {
     const instance = self.?;
-    if (utils.check_leviathan_python_object(instance, LEVIATHAN_LOOP_MAGIC)) {
-        return -1;
-    }
-
     return visit.?(@ptrCast(instance), arg);
 }
 
 pub fn loop_clear(self: ?*PythonLoopObject) callconv(.C) c_int {
     const instance = self.?;
-    if (utils.check_leviathan_python_object(instance, LEVIATHAN_LOOP_MAGIC)) {
-        @panic("Invalid Leviathan's object");
-    }
-
     const py_loop = instance;
 
     if (py_loop.loop_obj) |loop| {
@@ -77,7 +69,7 @@ pub fn loop_clear(self: ?*PythonLoopObject) callconv(.C) c_int {
         py_loop.loop_obj = null;
     }
 
-    python_c.Py_XDECREF(py_loop.exception_handler);
+    python_c.py_xdecref(py_loop.exception_handler);
     py_loop.exception_handler = null;
 
     return 0;
@@ -85,10 +77,6 @@ pub fn loop_clear(self: ?*PythonLoopObject) callconv(.C) c_int {
 
 pub fn loop_dealloc(self: ?*PythonLoopObject) callconv(.C) void {
     const instance = self.?;
-    if (utils.check_leviathan_python_object(instance, LEVIATHAN_LOOP_MAGIC)) {
-        @panic("Invalid Leviathan's object");
-    }
-
     // python_c.PyObject_GC_UnTrack(instance);
     _ = loop_clear(instance);
 
@@ -101,16 +89,14 @@ inline fn z_loop_init(
 ) !c_int {
     var kwlist: [4][*c]u8 = undefined;
     kwlist[0] = @constCast("ready_tasks_queue_min_bytes_capacity\x00");
-    kwlist[1] = @constCast("thread_safe\x00");
-    kwlist[2] = @constCast("exception_handler\x00");
-    kwlist[3] = null;
+    kwlist[1] = @constCast("exception_handler\x00");
+    kwlist[2] = null;
 
     var ready_tasks_queue_min_bytes_capacity: u64 = 0;
-    var thread_safe: u8 = 0;
     var exception_handler: ?PyObject = null;
 
     if (python_c.PyArg_ParseTupleAndKeywords(
-            args, kwargs, "KBO\x00", @ptrCast(&kwlist), &ready_tasks_queue_min_bytes_capacity, &thread_safe,
+            args, kwargs, "KO\x00", @ptrCast(&kwlist), &ready_tasks_queue_min_bytes_capacity,
             &exception_handler
     ) < 0) {
         return error.PythonError;
@@ -122,9 +108,9 @@ inline fn z_loop_init(
     }
 
     self.exception_handler = python_c.Py_NewRef(exception_handler.?) orelse return error.PythonError;
-    errdefer python_c.Py_DECREF(exception_handler.?);
+    errdefer python_c.py_decref(exception_handler.?);
 
-    self.loop_obj = try Loop.init(allocator, (thread_safe != 0), @intCast(ready_tasks_queue_min_bytes_capacity));
+    self.loop_obj = try Loop.init(allocator, @intCast(ready_tasks_queue_min_bytes_capacity));
     self.loop_obj.?.py_loop = self;
     return 0;
 }
@@ -132,10 +118,6 @@ inline fn z_loop_init(
 pub fn loop_init(
     self: ?*PythonLoopObject, args: ?PyObject, kwargs: ?PyObject
 ) callconv(.C) c_int {
-    if (utils.check_leviathan_python_object(self.?, LEVIATHAN_LOOP_MAGIC)) {
-        return -1;
-    }
-    const ret = utils.execute_zig_function(z_loop_init, .{self.?, args, kwargs});
-    return ret;
+    return utils.execute_zig_function(z_loop_init, .{self.?, args, kwargs});
 }
 

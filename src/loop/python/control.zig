@@ -16,10 +16,6 @@ const std = @import("std");
 
 pub fn loop_run_forever(self: ?*PythonLoopObject, _: ?PyObject) callconv(.C) ?PyObject {
     const instance = self.?;
-    if (utils.check_leviathan_python_object(instance, LEVIATHAN_LOOP_MAGIC)) {
-        return null;
-    }
-
     const loop_obj = instance.loop_obj.?;
     loop_obj.run_forever() catch return null;
 
@@ -29,10 +25,6 @@ pub fn loop_run_forever(self: ?*PythonLoopObject, _: ?PyObject) callconv(.C) ?Py
 
 pub fn loop_stop(self: ?*PythonLoopObject, _: ?PyObject) callconv(.C) ?PyObject {
     const instance = self.?;
-    if (utils.check_leviathan_python_object(instance, LEVIATHAN_LOOP_MAGIC)) {
-        return null;
-    }
-
     const loop_obj = instance.loop_obj.?;
 
     const mutex = &loop_obj.mutex;
@@ -45,10 +37,6 @@ pub fn loop_stop(self: ?*PythonLoopObject, _: ?PyObject) callconv(.C) ?PyObject 
 
 pub fn loop_is_running(self: ?*PythonLoopObject, _: ?PyObject) callconv(.C) ?PyObject {
     const instance = self.?;
-    if (utils.check_leviathan_python_object(instance, LEVIATHAN_LOOP_MAGIC)) {
-        return null;
-    }
-
     const loop_obj = instance.loop_obj.?;
     const mutex = &loop_obj.mutex;
     mutex.lock();
@@ -59,10 +47,6 @@ pub fn loop_is_running(self: ?*PythonLoopObject, _: ?PyObject) callconv(.C) ?PyO
 
 pub fn loop_is_closed(self: ?*PythonLoopObject, _: ?PyObject) callconv(.C) ?PyObject {
     const instance = self.?;
-    if (utils.check_leviathan_python_object(instance, LEVIATHAN_LOOP_MAGIC)) {
-        return null;
-    }
-
     const loop_obj = instance.loop_obj.?;
 
     const mutex = &loop_obj.mutex;
@@ -74,10 +58,6 @@ pub fn loop_is_closed(self: ?*PythonLoopObject, _: ?PyObject) callconv(.C) ?PyOb
 
 pub fn loop_close(self: ?*PythonLoopObject, _: ?PyObject) callconv(.C) ?PyObject {
     const instance = self.?;
-    if (utils.check_leviathan_python_object(instance, LEVIATHAN_LOOP_MAGIC)) {
-        return null;
-    }
-
     const loop_obj = instance.loop_obj.?;
 
     const mutex = &loop_obj.mutex;
@@ -93,12 +73,10 @@ pub fn loop_close(self: ?*PythonLoopObject, _: ?PyObject) callconv(.C) ?PyObject
         const queue = &loop_obj.ready_tasks_queues[loop_obj.ready_tasks_queue_to_use];
         var node = queue.first;
         while (node) |n| {
-            const handle: *Handle = @alignCast(@ptrCast(n.data.?));
-            const handle_mutex = &handle.mutex;
-            handle_mutex.lock();
-            handle.cancelled = true;
-            handle_mutex.unlock();
-
+            const events_set: *Loop.EventSet = @alignCast(@ptrCast(n.data.?));
+            for (events_set.events[0..events_set.events_num]) |handle| {
+                handle.cancel();
+            }
             node = n.next;
         }
     }

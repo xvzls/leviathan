@@ -49,8 +49,8 @@ pub inline fn py_xdecref(op: ?*Python.PyObject) void {
     }
 }
 
-pub inline fn py_newref(op: *Python.PyObject) *Python.PyObject {
-    Python.Py_INCREF(op);
+pub inline fn py_newref(op: anytype) @TypeOf(op) {
+    Python.py_incref(@ptrCast(op));
     return op;
 }
 

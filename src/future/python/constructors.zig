@@ -41,17 +41,17 @@ inline fn z_future_new(
 
     const asyncio_module: PyObject = python_c.PyImport_ImportModule("asyncio\x00")
         orelse return error.PythonError;
-    errdefer python_c.Py_DECREF(asyncio_module);
+    errdefer python_c.py_decref(asyncio_module);
 
     instance.asyncio_module = asyncio_module;
 
     const invalid_state_exc: PyObject = python_c.PyObject_GetAttrString(asyncio_module, "InvalidStateError\x00")
         orelse return error.PythonError;
-    errdefer python_c.Py_DECREF(invalid_state_exc);
+    errdefer python_c.py_decref(invalid_state_exc);
 
     const cancelled_error_exc: PyObject = python_c.PyObject_GetAttrString(asyncio_module, "CancelledError\x00")
         orelse return error.PythonError;
-    errdefer python_c.Py_DECREF(cancelled_error_exc);
+    errdefer python_c.py_decref(cancelled_error_exc);
 
     instance.cancelled_error_exc = cancelled_error_exc;
     instance.invalid_state_exc = invalid_state_exc;
@@ -75,10 +75,6 @@ pub fn future_new(
 
 pub fn future_traverse(self: ?*PythonFutureObject, visit: python_c.visitproc, arg: ?*anyopaque) callconv(.C) c_int {
     const instance = self.?;
-    if (utils.check_leviathan_python_object(instance, LEVIATHAN_FUTURE_MAGIC)) {
-        return -1;
-    }
-
     const objects = .{
         instance.asyncio_module,
         instance.invalid_state_exc,
@@ -109,34 +105,30 @@ pub fn future_traverse(self: ?*PythonFutureObject, visit: python_c.visitproc, ar
 
 pub fn future_clear(self: ?*PythonFutureObject) callconv(.C) c_int {
     const py_future = self.?;
-    if (utils.check_leviathan_python_object(py_future, LEVIATHAN_FUTURE_MAGIC)) {
-        @panic("Invalid Leviathan's object");
-    }
-
     if (py_future.future_obj) |future_obj| {
         future_obj.release();
         py_future.future_obj = null;
     }
 
-    python_c.Py_XDECREF(@ptrCast(py_future.py_loop));
+    python_c.py_xdecref(@ptrCast(py_future.py_loop));
     py_future.py_loop = null;
 
-    python_c.Py_XDECREF(py_future.exception);
+    python_c.py_xdecref(py_future.exception);
     py_future.exception = null;
 
-    python_c.Py_XDECREF(py_future.exception_tb);
+    python_c.py_xdecref(py_future.exception_tb);
     py_future.exception_tb = null;
 
-    python_c.Py_XDECREF(py_future.cancel_msg_py_object);
+    python_c.py_xdecref(py_future.cancel_msg_py_object);
     py_future.cancel_msg = null;
 
-    python_c.Py_DECREF(py_future.invalid_state_exc);
+    python_c.py_xdecref(py_future.invalid_state_exc);
     py_future.invalid_state_exc = null;
 
-    python_c.Py_DECREF(py_future.cancelled_error_exc);
+    python_c.py_xdecref(py_future.cancelled_error_exc);
     py_future.cancelled_error_exc = null;
 
-    python_c.Py_DECREF(py_future.asyncio_module);
+    python_c.py_xdecref(py_future.asyncio_module);
     py_future.asyncio_module = null;
 
     return 0;
@@ -144,11 +136,6 @@ pub fn future_clear(self: ?*PythonFutureObject) callconv(.C) c_int {
 
 pub fn future_dealloc(self: ?*PythonFutureObject) callconv(.C) void {
     const instance = self.?;
-    if (utils.check_leviathan_python_object(self.?, LEVIATHAN_FUTURE_MAGIC)) {
-        @panic("Invalid Leviathan's object");
-    }
-
-    python_c.PyObject_GC_UnTrack(instance);
     _ = future_clear(instance);
 
     const @"type": *python_c.PyTypeObject = @ptrCast(python_c.Py_TYPE(@ptrCast(instance)) orelse unreachable);
@@ -160,25 +147,23 @@ inline fn z_future_init(
 ) !c_int {
     var kwlist: [3][*c]u8 = undefined;
     kwlist[0] = @constCast("loop\x00");
-    kwlist[1] = @constCast("thread_safe\x00");
-    kwlist[2] = null;
+    kwlist[1] = null;
 
     var py_loop: ?PyObject = null;
-    var thread_safe: u8 = 0;
 
-    if (python_c.PyArg_ParseTupleAndKeywords(args, kwargs, "OB\x00", @ptrCast(&kwlist), &py_loop, &thread_safe) < 0) {
+    if (python_c.PyArg_ParseTupleAndKeywords(args, kwargs, "O\x00", @ptrCast(&kwlist), &py_loop) < 0) {
         return error.PythonError;
     }
 
     const leviathan_loop: *Loop.constructors.PythonLoopObject = @ptrCast(py_loop.?);
-    if (utils.check_leviathan_python_object(leviathan_loop, Loop.constructors.LEVIATHAN_LOOP_MAGIC)) {
+    if (python_c.PyObject_TypeCheck(@ptrCast(leviathan_loop), &Loop.PythonLoopType) == 0) {
         utils.put_python_runtime_error_message("Invalid asyncio event loop. Only Leviathan's event loops are allowed\x00");
         return error.PythonError;
     }
 
-    self.future_obj = try Future.init(allocator, (thread_safe != 0), leviathan_loop.loop_obj.?);
+    self.future_obj = try Future.init(allocator, leviathan_loop.loop_obj.?);
     self.future_obj.?.py_future = self;
-    python_c.Py_INCREF(@ptrCast(leviathan_loop));
+    python_c.py_incref(@ptrCast(leviathan_loop));
     self.py_loop = leviathan_loop;
 
     return 0;
@@ -187,9 +172,5 @@ inline fn z_future_init(
 pub fn future_init(
     self: ?*PythonFutureObject, args: ?PyObject, kwargs: ?PyObject
 ) callconv(.C) c_int {
-    if (utils.check_leviathan_python_object(self.?, LEVIATHAN_FUTURE_MAGIC)) {
-        return -1;
-    }
-    const ret = utils.execute_zig_function(z_future_init, .{self.?, args, kwargs});
-    return ret;
+    return utils.execute_zig_function(z_future_init, .{self.?, args, kwargs});
 }

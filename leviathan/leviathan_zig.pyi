@@ -17,16 +17,15 @@ class Future(Generic[_T]):
 	def get_loop(self) -> asyncio.AbstractEventLoop: ...
 
 
-class Handle:
+class Handle(asyncio.Handle):
 	def __init__(
 		self, callback_info: tuple[Callable[..., None], ...], loop: Loop,
 		context: Context, exception_handler: Callable[[Exception], None],
-		thread_safe: bool
 	) -> None: ...
 
 
 class Loop:
-	def __init__(self, ready_tasks_queue_min_bytes_capacity: int, thread_safe: bool,
+	def __init__(self, ready_tasks_queue_min_bytes_capacity: int,
 			  exception_handler: Callable[[Exception], None]) -> None: ...
 	def run_forever(self) -> None: ...
 	def stop(self) -> None: ...

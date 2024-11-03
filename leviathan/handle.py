@@ -1,5 +1,6 @@
 
 from .leviathan_zig import Handle as _Handle
+from .leviathan_zig_single_thread import Handle as _HandleSingleThread
 
 from contextvars import Context, copy_context
 from typing import Any, Callable, Sequence
@@ -8,7 +9,7 @@ import asyncio
 
 class Handle(asyncio.Handle):
 	def __init__(self, callback: Callable[..., None], args: Sequence[Any], loop: asyncio.AbstractEventLoop,
-			  context: Context | None = None, thread_safe: bool = False) -> None:
+			  thread_safe: bool, context: Context | None = None) -> None:
 		if context is None:
 			context = copy_context()
 
@@ -21,9 +22,14 @@ class Handle(asyncio.Handle):
 			raise ValueError("The given loop is not a leviathan event loop")
 
 		callback_info = (callback, *args)
-		handle_leviathan_class = _Handle(
-			callback_info, leviathan_loop, context, exception_handler, thread_safe
-		)
+		if thread_safe:
+			handle_leviathan_class = _Handle(
+				callback_info, leviathan_loop, context, exception_handler
+			)
+		else:
+			handle_leviathan_class = _HandleSingleThread(
+				callback_info, leviathan_loop, context, exception_handler
+			)
 		self._handle_leviathan_class = handle_leviathan_class
 		self._loop = loop
 

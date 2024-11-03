@@ -13,64 +13,29 @@ const CallOnceReturn = enum {
     Continue, Stop, Exception
 };
 
-// inline fn get_ready_events(loop: *Loop, index: *u8) ?*LinkedList {
-//     // const mutex = &loop.mutex;
-//     // mutex.lock();
-//     // defer mutex.unlock();
 
-//     if (loop.stopping) {
-//         return null;
-//     }
+inline fn call_once(_: usize, queue: *LinkedList, arena: *std.heap.ArenaAllocator) CallOnceReturn {
+    var _node: ?LinkedList.Node = queue.first orelse return .Stop;
 
-//     const ready_tasks_queue_to_use = loop.ready_tasks_queue_to_use;
-//     const ready_tasks_queue = &loop.ready_tasks_queues[ready_tasks_queue_to_use];
-//     index.* = ready_tasks_queue_to_use;
-//     loop.ready_tasks_queue_to_use = 1 - ready_tasks_queue_to_use;
-
-//     return ready_tasks_queue;
-// }
-
-inline fn call_once(_: usize, queue: *LinkedList, _: *std.heap.ArenaAllocator) CallOnceReturn {
-    var _node: ?LinkedList.Node = queue.first;
-    if (_node == null) {
-        return .Stop;
-    }
-
-    var should_stop: bool = false;
+    var can_execute: bool = true;
     while (_node) |node| {
         _node = node.next;
-        const events: *Loop.EventSet = @alignCast(@ptrCast(node.data.?));
-        const events_num = events.events_num;
-        if (events_num == 0) {
-            return .Stop;
-        }
-        for (events.events[0..events_num]) |handle| {
-            // if (should_stop) {
-            //     const handle_mutex = &handle.mutex;
-            //     handle_mutex.lock();
-            //     handle.cancelled = true;
-            //     handle_mutex.unlock();
-            // }
+        const events_set: *Loop.EventSet = @alignCast(@ptrCast(node.data.?));
+        const events_num = events_set.events_num;
+        if (events_num == 0) return .Stop;
 
-            if (handle.run_callback()) {
-                should_stop = true;
+        for (events_set.events[0..events_num]) |handle| {
+            if (handle.run_callback(can_execute)) {
+                can_execute = false;
             }
         }
-        events.events_num = 0;
+        events_set.events_num = 0;
     }
 
-    // const deallocated = arena.reset(.{
-    //     .retain_with_limit = ready_tasks_queue_min_bytes_capacity
-    // });
-    // if (!deallocated) {
-    // _ = arena.reset(.free_all);
-    // }
+    // TODO: Clear queue to ready_tasks_queue_min_bytes_capacity
+    _ = arena.reset(.free_all);
 
-    // queue.first = null;
-    // queue.last = null;
-    // queue.len = 0;
-
-    if (should_stop) {
+    if (!can_execute) {
         return .Exception;
     }
 
@@ -78,10 +43,10 @@ inline fn call_once(_: usize, queue: *LinkedList, _: *std.heap.ArenaAllocator) C
 }
 
 pub fn run_forever(self: *Loop) !void {
-    // const mutex = &self.mutex;
+    const mutex = &self.mutex;
     {
-        // mutex.lock();
-        // defer mutex.unlock();
+        mutex.lock();
+        defer mutex.unlock();
 
         if (self.closed) {
             utils.put_python_runtime_error_message("Loop is closed\x00");
@@ -103,8 +68,10 @@ pub fn run_forever(self: *Loop) !void {
     }
 
     defer {
+        mutex.lock();
         self.running = false;
         self.stopping = false;
+        mutex.unlock();
     }
 
     var ready_tasks_queue_to_use = self.ready_tasks_queue_to_use;
@@ -128,7 +95,4 @@ pub fn run_forever(self: *Loop) !void {
             .Exception => return error.PythonError,
         }
     }
-
-    // mutex.lock();
-    // mutex.unlock();
 }

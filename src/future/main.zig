@@ -16,7 +16,6 @@ allocator: std.mem.Allocator,
 result: ?*anyopaque = null,
 status: FutureStatus = .PENDING,
 
-thread_safe: bool,
 mutex: std.Thread.Mutex,
 
 callbacks_arena: std.heap.ArenaAllocator,
@@ -29,24 +28,15 @@ loop: ?*Loop,
 py_future: ?*Future.constructors.PythonFutureObject = null,
 
 
-pub fn init(allocator: std.mem.Allocator, thread_safe: bool, loop: *Loop) !*Future {
+pub fn init(allocator: std.mem.Allocator, loop: *Loop) !*Future {
     const fut = try allocator.create(Future);
     errdefer allocator.destroy(fut);
 
-    const mutex = blk: {
-        // if (thread_safe or builtin.mode == .Debug) {
-            break :blk std.Thread.Mutex{};
-        // } else {
-        //     break :blk std.Thread.Mutex{
-        //         .impl = NoOpMutex{},
-        //     };
-        // }
-    };
+    const mutex = std.Thread.Mutex{};
 
     fut.* = .{
         .allocator = allocator,
         .loop = loop,
-        .thread_safe = thread_safe,
         .mutex = mutex,
         .callbacks_arena = std.heap.ArenaAllocator.init(allocator)
     };

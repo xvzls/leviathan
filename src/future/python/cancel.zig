@@ -10,9 +10,6 @@ const utils = @import("../../utils/utils.zig");
 
 pub fn future_cancel(self: ?*PythonFutureObject, args: ?PyObject, kwargs: ?PyObject) callconv(.C) ?PyObject {
     const instance = self.?;
-    if (utils.check_leviathan_python_object(instance, LEVIATHAN_FUTURE_MAGIC)) {
-        return null;
-    }
 
     const obj = instance.future_obj.?;
     const mutex = &obj.mutex;
@@ -43,9 +40,6 @@ pub fn future_cancel(self: ?*PythonFutureObject, args: ?PyObject, kwargs: ?PyObj
 
 pub fn future_cancelled(self: ?*PythonFutureObject, _: ?PyObject) callconv(.C) ?PyObject {
     const instance = self.?;
-    if (utils.check_leviathan_python_object(instance, LEVIATHAN_FUTURE_MAGIC)) {
-        return null;
-    }
 
     const obj = instance.future_obj.?;
     const mutex = &obj.mutex;

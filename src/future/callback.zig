@@ -22,7 +22,7 @@ pub fn create_python_handle(self: *Future, callback_data: PyObject) !*Handle {
 
     const py_callback_info = python_c.Py_BuildValue("(OO)\x00", py_callback, self.py_future.?)
         orelse return error.PythonError;
-    errdefer python_c.Py_DECREF(py_callback_info);
+    errdefer python_c.py_decref(py_callback_info);
 
     const py_loop = self.loop.?.py_loop.?;
 
@@ -30,7 +30,7 @@ pub fn create_python_handle(self: *Future, callback_data: PyObject) !*Handle {
         "(OOOOp)\x00", py_callback_info, py_loop, py_context.?,
         py_loop.exception_handler.?, @as(c_int, 0)
     ) orelse return error.PythonError;
-    defer python_c.Py_DECREF(args);
+    defer python_c.py_decref(args);
 
     const py_handle: *Handle.PythonHandleObject = @ptrCast(
         python_c.PyObject_CallObject(@ptrCast(&Handle.PythonHandleType), args)
@@ -71,11 +71,11 @@ pub fn add_done_callback(
         const allocator = self.callbacks_arena_allocator;
         const handle = switch (callback_type) {
             .Python => try self.create_python_handle(@alignCast(@ptrCast(data.?))),
-            .Zig => try Handle.init(allocator, null, self.loop.?, callback.?, self, false)
+            .Zig => try Handle.init(allocator, null, self.loop.?, callback.?, self)
         };
         errdefer {
             switch (callback_type) {
-                .Python => python_c.Py_DECREF(@ptrCast(handle.py_handle.?)),
+                .Python => python_c.py_decref(@ptrCast(handle.py_handle.?)),
                 .Zig => allocator.destroy(handle)
             }
         }
@@ -115,7 +115,7 @@ pub fn remove_done_callback(self: *Future, callback_id: u64, callback_type: Call
 fn release_future_callback(_: *Handle, data: ?*anyopaque) bool {
     const future: *Future = @alignCast(@ptrCast(data.?));
     if (future.py_future) |py_future| {
-        python_c.Py_DECREF(py_future);
+        python_c.py_decref(py_future);
     }else{
         future.release();
     }

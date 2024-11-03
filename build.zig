@@ -25,8 +25,23 @@ pub fn build(b: *std.Build) void {
     python_lib.linkSystemLibrary("python3.12");
     python_lib.linkLibC();
 
+    const python_lib_single_thread = b.addSharedLibrary(.{
+        .name = "leviathan_single_thread",
+        .optimize = optimize,
+        .target = target,
+        .root_source_file = b.path("src/lib.zig"),
+        .single_threaded = true
+    });
+    python_lib_single_thread.addIncludePath(.{
+        .cwd_relative = "/usr/include/"
+    });
+    python_lib_single_thread.linkSystemLibrary("python3.12");
+    python_lib_single_thread.linkLibC();
+
     const compile_python_lib = b.addInstallArtifact(python_lib, .{});
+    const compile_single_thread_python_lib = b.addInstallArtifact(python_lib_single_thread, .{});
     b.getInstallStep().dependOn(&compile_python_lib.step);
+    b.getInstallStep().dependOn(&compile_single_thread_python_lib.step);
 
     const lib_unit_tests = b.addTest(.{
         .root_source_file = b.path("tests/main.zig"),

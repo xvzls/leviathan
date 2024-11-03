@@ -32,21 +32,11 @@ inline fn z_future_add_done_callback(self: *PythonFutureObject, args: PyObject) 
 }
 
 pub fn future_add_done_callback(self: ?*PythonFutureObject, args: ?PyObject) callconv(.C) ?PyObject {
-    const instance = self.?;
-    if (utils.check_leviathan_python_object(instance, LEVIATHAN_FUTURE_MAGIC)) {
-        return null;
-    }
-
-    const ret = utils.execute_zig_function(z_future_add_done_callback, .{instance, args.?});
-    return ret;
+    return utils.execute_zig_function(z_future_add_done_callback, .{self.?, args.?});
 }
 
 pub fn future_remove_done_callback(self: ?*PythonFutureObject, args: ?PyObject) callconv(.C) ?PyObject {
     const instance = self.?;
-    if (utils.check_leviathan_python_object(instance, LEVIATHAN_FUTURE_MAGIC)) {
-        return null;
-    }
-
     var callback_id: u64 = undefined;
     if (python_c.PyArg_ParseTuple(args.?, "K\x00", &callback_id) < 0) {
         return null;
