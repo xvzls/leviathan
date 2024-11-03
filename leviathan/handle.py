@@ -27,9 +27,9 @@ class Handle(asyncio.Handle):
 		self._handle_leviathan_class = handle_leviathan_class
 		self._loop = loop
 
-		for x in dir(handle_leviathan_class):
-			if x.startswith("_"):
-				continue
-			obj = getattr(handle_leviathan_class, x)
-			if callable(obj):
-				setattr(self, x, obj)
+		# for x in dir(handle_leviathan_class):
+		# 	if x.startswith("_"):
+		# 		continue
+		# 	obj = getattr(handle_leviathan_class, x)
+		# 	if callable(obj):
+		# 		setattr(self, x, obj)

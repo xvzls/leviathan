@@ -7,6 +7,8 @@ const allocator = utils.allocator;
 const Handle = @import("main.zig");
 const Loop = @import("../loop/main.zig");
 
+const std = @import("std");
+
 pub const LEVIATHAN_HANDLE_MAGIC = 0x48414E444C450001;
 
 pub const PythonHandleObject = extern struct {
@@ -21,17 +23,10 @@ pub const PythonHandleObject = extern struct {
     args: ?PyObject
 };
 
-fn callback_for_python_methods(handle: *Handle, data: ?*anyopaque) bool {
-    const py_handle: *PythonHandleObject = @alignCast(@ptrCast(data.?));
-    defer python_c.Py_DECREF(@ptrCast(py_handle));
-
-    if (handle.cancelled) {
-        return false;
-    }
-
+pub inline fn callback_for_python_methods(py_handle: *PythonHandleObject) bool {
     const ret: ?PyObject = python_c.PyObject_CallObject(py_handle.py_callback.?, py_handle.args.?);
     if (ret) |value| {
-        python_c.Py_DECREF(value);
+        python_c.py_decref(value);
     }else{
         if (
             python_c.PyErr_ExceptionMatches(python_c.PyExc_SystemExit) > 0 or
@@ -42,15 +37,11 @@ fn callback_for_python_methods(handle: *Handle, data: ?*anyopaque) bool {
 
         const exception: PyObject = python_c.PyErr_GetRaisedException()
             orelse return true;
-        defer python_c.Py_DECREF(exception);
+        defer python_c.py_decref(exception);
 
-        const py_args: PyObject = python_c.Py_BuildValue("(O)\x00", exception)
+        const exc_handler_ret: PyObject = python_c.PyObject_CallOneArg(py_handle.exception_handler.?, exception)
             orelse return true;
-        defer python_c.Py_DECREF(py_args);
-
-        const exc_handler_ret: PyObject = python_c.PyObject_CallObject(py_handle.exception_handler.?, py_args)
-            orelse return true;
-        python_c.Py_DECREF(exc_handler_ret);
+        python_c.py_decref(exc_handler_ret);
     }
     return false;
 }
@@ -59,9 +50,14 @@ inline fn z_handle_new(
     @"type": *python_c.PyTypeObject, _: ?PyObject,
     _: ?PyObject
 ) !*PythonHandleObject {
+    // _ = @"type";
+    // const instance: *PythonHandleObject = try allocator.create(PythonHandleObject);
+    // errdefer allocator.destroy(instance);
     const instance: *PythonHandleObject = @ptrCast(@"type".tp_alloc.?(@"type", 0) orelse return error.PythonError);
     errdefer @"type".tp_free.?(instance);
-
+    //
+    //
+    // instance.* = std.mem.zeroes(PythonHandleObject);
     instance.magic = LEVIATHAN_HANDLE_MAGIC;
     instance.handle_obj = null;
 
@@ -141,15 +137,17 @@ fn handle_clear(self: ?*PythonHandleObject) callconv(.C) c_int {
 
 fn handle_dealloc(self: ?*PythonHandleObject) void {
     const instance = self.?;
-    if (utils.check_leviathan_python_object(instance, LEVIATHAN_HANDLE_MAGIC)) {
-        @panic("Invalid Leviathan's object");
-    }
+    // if (utils.check_leviathan_python_object(instance, LEVIATHAN_HANDLE_MAGIC)) {
+    //     @panic("Invalid Leviathan's object");
+    // }
 
-    python_c.PyObject_GC_UnTrack(instance);
+    // python_c.PyObject_GC_UnTrack(instance);
     _ = handle_clear(instance);
 
     const @"type": *python_c.PyTypeObject = @ptrCast(python_c.Py_TYPE(@ptrCast(instance)) orelse unreachable);
     @"type".tp_free.?(@ptrCast(instance));
+
+    // allocator.destroy(instance);
 }
 
 inline fn z_handle_init(
@@ -194,7 +192,7 @@ inline fn z_handle_init(
     }
 
     self.handle_obj = try Handle.init(
-        allocator, self, leviathan_loop.loop_obj.?, &callback_for_python_methods, self, (thread_safe != 0)
+        allocator, self, leviathan_loop.loop_obj.?, null, null, (thread_safe != 0)
     );
     
     self.exception_handler = python_c.py_newref(exception_handler.?);
@@ -207,9 +205,9 @@ inline fn z_handle_init(
 }
 
 fn handle_init(self: ?*PythonHandleObject, args: ?PyObject, kwargs: ?PyObject) callconv(.C) c_int {
-    if (utils.check_leviathan_python_object(self.?, LEVIATHAN_HANDLE_MAGIC)) {
-        return -1;
-    }
+    // if (utils.check_leviathan_python_object(self.?, LEVIATHAN_HANDLE_MAGIC)) {
+    //     return -1;
+    // }
     const ret = utils.execute_zig_function(z_handle_init, .{self.?, args, kwargs});
     return ret;
 }
@@ -223,9 +221,9 @@ fn handle_get_context(self: ?*PythonHandleObject, _: ?PyObject) callconv(.C) ?Py
 }
 
 fn handle_cancel(self: ?*PythonHandleObject, _: ?PyObject) callconv(.C) ?PyObject {
-    if (utils.check_leviathan_python_object(self.?, LEVIATHAN_HANDLE_MAGIC)) {
-        return null;
-    }
+    // if (utils.check_leviathan_python_object(self.?, LEVIATHAN_HANDLE_MAGIC)) {
+    //     return null;
+    // }
 
     const handle_obj = self.?.handle_obj.?;
     const mutex = &handle_obj.mutex;
@@ -279,11 +277,11 @@ pub var PythonHandleType = python_c.PyTypeObject{
     .tp_doc = "Leviathan's handle class\x00",
     .tp_basicsize = @sizeOf(PythonHandleObject),
     .tp_itemsize = 0,
-    .tp_flags = python_c.Py_TPFLAGS_DEFAULT | python_c.Py_TPFLAGS_BASETYPE | python_c.Py_TPFLAGS_HAVE_GC,
+    .tp_flags = python_c.Py_TPFLAGS_DEFAULT | python_c.Py_TPFLAGS_BASETYPE,// | python_c.Py_TPFLAGS_HAVE_GC,
     .tp_new = &handle_new,
     .tp_init = @ptrCast(&handle_init),
-    .tp_traverse = @ptrCast(&handle_traverse),
-    .tp_clear = @ptrCast(&handle_clear),
+    // .tp_traverse = @ptrCast(&handle_traverse),
+    // .tp_clear = @ptrCast(&handle_clear),
     .tp_dealloc = @ptrCast(&handle_dealloc),
     .tp_methods = @constCast(PythonhandleMethods.ptr),
 };

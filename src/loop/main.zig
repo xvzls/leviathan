@@ -24,8 +24,8 @@ pub const EventType = enum {
 pub const MaxEvents = std.mem.page_size / @sizeOf(*Handle);
 
 pub const EventSet = struct {
-    events_num: u16 = 0,
-    events: [MaxEvents]*Handle = undefined,
+    events_num: usize = 0,
+    events: []*Handle,
 };
 
 allocator: std.mem.Allocator,

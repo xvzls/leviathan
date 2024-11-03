@@ -4,22 +4,32 @@ const Loop = @import("main.zig");
 const LinkedList = @import("../utils/linked_list.zig");
 
 
+const std = @import("std");
+
 pub inline fn call_soon(self: *Loop, handle: *Handle) !void {
     const queue = &self.ready_tasks_queues[self.ready_tasks_queue_to_use];
 
-    if (queue.last) |last| {
-        const events: *Loop.EventSet = @alignCast(@ptrCast(last.data.?));
+    var events: *Loop.EventSet = undefined;
+    var node = queue.first;
+    while (node) |n| {
+        events = @alignCast(@ptrCast(n.data.?));
         const events_num = events.events_num;
-        if (events_num < Loop.MaxEvents) {
+        if (events_num < events.events.len) {
             events.events[events_num] = handle;
             events.events_num = events_num + 1;
             return;
         }
+        node = n.next;
     }
-    const allocator = queue.allocator;
-    const events: *Loop.EventSet = try allocator.create(Loop.EventSet);
+
+    const allocator = self.allocator;
+    events = try allocator.create(Loop.EventSet);
+    errdefer allocator.destroy(events);
+
+    const events_arr = try allocator.alloc(*Handle, Loop.MaxEvents * std.math.pow(usize, 2, queue.len));
     events.events_num = 1;
-    events.events[0] = handle;
+    events_arr[0] = handle;
+    events.events = events_arr;
 
     try queue.append(events);
 }

@@ -39,7 +39,7 @@ const PythonLoopMethods: []const python_c.PyMethodDef = &[_]python_c.PyMethodDef
         .ml_name = "_call_soon\x00",
         .ml_meth = @ptrCast(&scheduling.loop_call_soon),
         .ml_doc = "Schedule callback to be called with args arguments at the next iteration of the event loop.\x00",
-        .ml_flags = python_c.METH_VARARGS
+        .ml_flags = python_c.METH_O
     },
     python_c.PyMethodDef{
         .ml_name = null, .ml_meth = null, .ml_doc = null, .ml_flags = 0
@@ -51,11 +51,11 @@ pub var PythonLoopType = python_c.PyTypeObject{
     .tp_doc = "Leviathan's loop class\x00",
     .tp_basicsize = @sizeOf(constructors.PythonLoopObject),
     .tp_itemsize = 0,
-    .tp_flags = python_c.Py_TPFLAGS_DEFAULT | python_c.Py_TPFLAGS_BASETYPE | python_c.Py_TPFLAGS_HAVE_GC,
+    .tp_flags = python_c.Py_TPFLAGS_DEFAULT | python_c.Py_TPFLAGS_BASETYPE,// | python_c.Py_TPFLAGS_HAVE_GC,
     .tp_new = &constructors.loop_new,
     .tp_init = @ptrCast(&constructors.loop_init),
-    .tp_traverse = @ptrCast(&constructors.loop_traverse),
-    .tp_clear = @ptrCast(&constructors.loop_clear),
+    // .tp_traverse = @ptrCast(&constructors.loop_traverse),
+    // .tp_clear = @ptrCast(&constructors.loop_clear),
     .tp_dealloc = @ptrCast(&constructors.loop_dealloc),
     .tp_methods = @constCast(PythonLoopMethods.ptr)
 };

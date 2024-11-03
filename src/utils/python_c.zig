@@ -5,24 +5,24 @@ pub usingnamespace @cImport({
 
 pub inline fn get_py_true() *Python.PyObject {
     const py_true_struct: *Python.PyObject = @ptrCast(&Python._Py_TrueStruct);
-    Python.Py_INCREF(py_true_struct);
+    Python.py_incref(py_true_struct);
     return py_true_struct;
 }
 
 pub inline fn get_py_false() *Python.PyObject {
     const py_false_struct: *Python.PyObject = @ptrCast(&Python._Py_FalseStruct);
-    Python.Py_INCREF(py_false_struct);
+    Python.py_incref(py_false_struct);
     return py_false_struct;
 }
 
 pub inline fn get_py_none() *Python.PyObject {
     const py_none_struct: *Python.PyObject = @ptrCast(&Python._Py_NoneStruct);
-    Python.Py_INCREF(py_none_struct);
+    Python.py_incref(py_none_struct);
     return py_none_struct;
 }
 
 pub inline fn py_incref(op: *Python.PyObject) void {
-    const new_refcnt = op.unnamed_0.ob_refcnt_split[0] + 1;
+    const new_refcnt = op.unnamed_0.ob_refcnt_split[0] +% 1;
     if (new_refcnt == 0) {
         return;
     }

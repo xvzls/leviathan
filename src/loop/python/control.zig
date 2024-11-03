@@ -23,10 +23,7 @@ pub fn loop_run_forever(self: ?*PythonLoopObject, _: ?PyObject) callconv(.C) ?Py
     const loop_obj = instance.loop_obj.?;
     loop_obj.run_forever() catch return null;
 
-    const exception: PyObject = python_c.PyErr_GetRaisedException()
-        orelse return python_c.get_py_none();
-    python_c.PyErr_SetRaisedException(exception);
-    return null;
+    return python_c.get_py_none();
 }
 
 

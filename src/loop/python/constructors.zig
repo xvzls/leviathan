@@ -89,7 +89,7 @@ pub fn loop_dealloc(self: ?*PythonLoopObject) callconv(.C) void {
         @panic("Invalid Leviathan's object");
     }
 
-    python_c.PyObject_GC_UnTrack(instance);
+    // python_c.PyObject_GC_UnTrack(instance);
     _ = loop_clear(instance);
 
     const @"type": *python_c.PyTypeObject = @ptrCast(python_c.Py_TYPE(@ptrCast(instance)) orelse unreachable);

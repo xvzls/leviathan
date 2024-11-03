@@ -9,72 +9,42 @@ const PyObject = *python_c.PyObject;
 
 const std = @import("std");
 
-inline fn get_ready_events(loop: *Loop, index: *u8) ?*LinkedList {
-    // const mutex = &loop.mutex;
-    // mutex.lock();
-    // defer mutex.unlock();
+const CallOnceReturn = enum {
+    Continue, Stop, Exception
+};
 
-    if (loop.stopping) {
-        return null;
-    }
+// inline fn get_ready_events(loop: *Loop, index: *u8) ?*LinkedList {
+//     // const mutex = &loop.mutex;
+//     // mutex.lock();
+//     // defer mutex.unlock();
 
-    const ready_tasks_queue_to_use = loop.ready_tasks_queue_to_use;
-    const ready_tasks_queue = &loop.ready_tasks_queues[ready_tasks_queue_to_use];
-    index.* = ready_tasks_queue_to_use;
-    loop.ready_tasks_queue_to_use = 1 - ready_tasks_queue_to_use;
+//     if (loop.stopping) {
+//         return null;
+//     }
 
-    return ready_tasks_queue;
-}
+//     const ready_tasks_queue_to_use = loop.ready_tasks_queue_to_use;
+//     const ready_tasks_queue = &loop.ready_tasks_queues[ready_tasks_queue_to_use];
+//     index.* = ready_tasks_queue_to_use;
+//     loop.ready_tasks_queue_to_use = 1 - ready_tasks_queue_to_use;
 
-inline fn callback_for_python_methods(handle: *Handle, should_stop: bool) bool {
-    const py_handle: *Handle.PythonHandleObject = handle.py_handle.?;
-    defer python_c.py_decref(@ptrCast(py_handle));
+//     return ready_tasks_queue;
+// }
 
-    if (should_stop or handle.cancelled) {
-        return false;
-    }
-
-    const ret: ?PyObject = python_c.PyObject_Call(py_handle.py_callback.?, py_handle.args.?, null);
-    if (ret) |value| {
-        python_c.py_decref(value);
-    }else{
-        if (
-            python_c.PyErr_ExceptionMatches(python_c.PyExc_SystemExit) > 0 or
-            python_c.PyErr_ExceptionMatches(python_c.PyExc_KeyboardInterrupt) > 0
-        ) {
-            return true;
-        }
-
-        const exception: PyObject = python_c.PyErr_GetRaisedException()
-            orelse return true;
-        defer python_c.py_decref(exception);
-
-        const py_args: PyObject = python_c.Py_BuildValue("(O)\x00", exception)
-            orelse return true;
-        defer python_c.py_decref(py_args);
-
-        const exc_handler_ret: PyObject = python_c.PyObject_CallObject(py_handle.exception_handler.?, py_args)
-            orelse return true;
-        python_c.py_decref(exc_handler_ret);
-    }
-    return false;
-}
-
-inline fn call_once(self: *Loop) bool {
-    var queue_index: u8 = undefined;
-    const queue = get_ready_events(self, &queue_index) orelse return false;
-
+inline fn call_once(_: usize, queue: *LinkedList, _: *std.heap.ArenaAllocator) CallOnceReturn {
     var _node: ?LinkedList.Node = queue.first;
     if (_node == null) {
-        self.stopping = true;
-        return false;
+        return .Stop;
     }
 
     var should_stop: bool = false;
     while (_node) |node| {
         _node = node.next;
         const events: *Loop.EventSet = @alignCast(@ptrCast(node.data.?));
-        for (events.events[0..events.events_num]) |handle| {
+        const events_num = events.events_num;
+        if (events_num == 0) {
+            return .Stop;
+        }
+        for (events.events[0..events_num]) |handle| {
             // if (should_stop) {
             //     const handle_mutex = &handle.mutex;
             //     handle_mutex.lock();
@@ -82,30 +52,32 @@ inline fn call_once(self: *Loop) bool {
             //     handle_mutex.unlock();
             // }
 
-            // if (handle.run_callback()) {
-            if (callback_for_python_methods(handle, should_stop)) {
+            if (handle.run_callback()) {
                 should_stop = true;
             }
         }
-
+        events.events_num = 0;
     }
 
-    const arena = &self.ready_tasks_arenas[queue_index];
-    const not_deallocated = arena.reset(.{
-        .retain_with_limit = Loop.MaxEvents * @sizeOf(*Handle),
-    });
-    if (not_deallocated) {
-        _ = arena.reset(.free_all);
+    // const deallocated = arena.reset(.{
+    //     .retain_with_limit = ready_tasks_queue_min_bytes_capacity
+    // });
+    // if (!deallocated) {
+    // _ = arena.reset(.free_all);
+    // }
+
+    // queue.first = null;
+    // queue.last = null;
+    // queue.len = 0;
+
+    if (should_stop) {
+        return .Exception;
     }
 
-    queue.first = null;
-    queue.last = null;
-    queue.len = 0;
-
-    return true;
+    return .Continue;
 }
 
-pub inline fn run_forever(self: *Loop) !void {
+pub fn run_forever(self: *Loop) !void {
     // const mutex = &self.mutex;
     {
         // mutex.lock();
@@ -130,10 +102,33 @@ pub inline fn run_forever(self: *Loop) !void {
         self.stopping = false;
     }
 
-    while (call_once(self)) {}
+    defer {
+        self.running = false;
+        self.stopping = false;
+    }
+
+    var ready_tasks_queue_to_use = self.ready_tasks_queue_to_use;
+    const ready_tasks_queues: []LinkedList = &self.ready_tasks_queues;
+    const ready_tasks_arenas: []std.heap.ArenaAllocator = &self.ready_tasks_arenas;
+    const ready_tasks_queue_min_bytes_capacity = self.ready_tasks_queue_min_bytes_capacity;
+    while (!self.stopping) {
+        defer {
+            ready_tasks_queue_to_use = 1 - ready_tasks_queue_to_use;
+            self.ready_tasks_queue_to_use = ready_tasks_queue_to_use;
+        }
+
+        switch (
+            call_once(
+                ready_tasks_queue_min_bytes_capacity, &ready_tasks_queues[ready_tasks_queue_to_use],
+                &ready_tasks_arenas[ready_tasks_queue_to_use]
+            )
+        ) {
+            .Continue => {},
+            .Stop => break,
+            .Exception => return error.PythonError,
+        }
+    }
 
     // mutex.lock();
-    self.running = false;
-    self.stopping = false;
     // mutex.unlock();
 }

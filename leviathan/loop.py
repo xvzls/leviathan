@@ -35,8 +35,13 @@ class Loop(asyncio.AbstractEventLoop):
 
 	def call_soon(self, callback: Callable[[Unpack[_Ts]], Any], *args: Unpack[_Ts],
 			   context: Context | None = None) -> Handle:
+		# from time import time
+		# t = time()
 		handle = Handle(callback, args, self, context)
+		# print(f"call_soon: {time() - t}")
+		# t = time()
 		self._call_soon(handle._handle_leviathan_class)
+		# print(f"call_soon2: {time() - t}")
 		return handle
 
 	def _call_exception_handler(self, exc: Exception) -> None:
