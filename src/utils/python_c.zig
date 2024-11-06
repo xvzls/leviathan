@@ -22,7 +22,7 @@ pub inline fn get_py_none() *Python.PyObject {
 }
 
 pub inline fn py_incref(op: *Python.PyObject) void {
-    const new_refcnt = op.unnamed_0.ob_refcnt_split[0] +% 1;
+    const new_refcnt = op.unnamed_0.ob_refcnt_split[0] +| 1;
     if (new_refcnt == 0) {
         return;
     }
@@ -30,16 +30,20 @@ pub inline fn py_incref(op: *Python.PyObject) void {
     op.unnamed_0.ob_refcnt_split[0] = new_refcnt;
 }
 
+inline fn _Py_IsImmortal(arg_op: *Python.PyObject) bool {
+    return @as(i32, @bitCast(@as(c_int, @truncate(arg_op.unnamed_0.ob_refcnt)))) < @as(c_int, 0);
+}
+
 pub inline fn py_decref(op: *Python.PyObject) void {
     var ref = op.unnamed_0.ob_refcnt;
-    if (ref < 0) {
+    if (_Py_IsImmortal(op)) {
         return;
     }
 
     ref -= 1;
     op.unnamed_0.ob_refcnt = ref;
     if (ref == 0) {
-        Python._Py_Dealloc(op);
+        op.ob_type.*.tp_dealloc.?(op);
     }
 }
 

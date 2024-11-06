@@ -9,12 +9,8 @@ const Loop = @import("../../loop/main.zig");
 
 const std = @import("std");
 
-pub const LEVIATHAN_FUTURE_MAGIC = 0x4655545552554552;
-
 pub const PythonFutureObject = extern struct {
     ob_base: python_c.PyObject,
-    magic: u64,
-
     future_obj: ?*Future,
 
     asyncio_module: ?PyObject,
@@ -36,7 +32,6 @@ inline fn z_future_new(
     const instance: *PythonFutureObject = @ptrCast(@"type".tp_alloc.?(@"type", 0) orelse return error.PythonError);
     errdefer @"type".tp_free.?(instance);
 
-    instance.magic = LEVIATHAN_FUTURE_MAGIC;
     instance.future_obj = null;
 
     const asyncio_module: PyObject = python_c.PyImport_ImportModule("asyncio\x00")
@@ -103,40 +98,23 @@ pub fn future_traverse(self: ?*PythonFutureObject, visit: python_c.visitproc, ar
     return 0;
 }
 
-pub fn future_clear(self: ?*PythonFutureObject) callconv(.C) c_int {
-    const py_future = self.?;
+inline fn future_clear(py_future: *PythonFutureObject) void {
     if (py_future.future_obj) |future_obj| {
         future_obj.release();
-        py_future.future_obj = null;
     }
 
     python_c.py_xdecref(@ptrCast(py_future.py_loop));
-    py_future.py_loop = null;
-
     python_c.py_xdecref(py_future.exception);
-    py_future.exception = null;
-
     python_c.py_xdecref(py_future.exception_tb);
-    py_future.exception_tb = null;
-
     python_c.py_xdecref(py_future.cancel_msg_py_object);
-    py_future.cancel_msg = null;
-
     python_c.py_xdecref(py_future.invalid_state_exc);
-    py_future.invalid_state_exc = null;
-
     python_c.py_xdecref(py_future.cancelled_error_exc);
-    py_future.cancelled_error_exc = null;
-
     python_c.py_xdecref(py_future.asyncio_module);
-    py_future.asyncio_module = null;
-
-    return 0;
 }
 
 pub fn future_dealloc(self: ?*PythonFutureObject) callconv(.C) void {
     const instance = self.?;
-    _ = future_clear(instance);
+    future_clear(instance);
 
     const @"type": *python_c.PyTypeObject = @ptrCast(python_c.Py_TYPE(@ptrCast(instance)) orelse unreachable);
     @"type".tp_free.?(@ptrCast(instance));
@@ -163,8 +141,7 @@ inline fn z_future_init(
 
     self.future_obj = try Future.init(allocator, leviathan_loop.loop_obj.?);
     self.future_obj.?.py_future = self;
-    python_c.py_incref(@ptrCast(leviathan_loop));
-    self.py_loop = leviathan_loop;
+    self.py_loop = python_c.py_newref(leviathan_loop);
 
     return 0;
 }

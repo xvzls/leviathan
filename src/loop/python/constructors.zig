@@ -13,6 +13,9 @@ pub const PythonLoopObject = extern struct {
     magic: u64,
     loop_obj: ?*Loop,
 
+    contextvars_module: ?PyObject,
+    contextvars_copy: ?PyObject,
+
     running: bool,
     stopping: bool,
     closed: bool,
@@ -29,6 +32,17 @@ inline fn z_loop_new(
 
     instance.magic = LEVIATHAN_LOOP_MAGIC;
     instance.loop_obj = null;
+
+    const contextvars_module: PyObject = python_c.PyImport_ImportModule("contextvars\x00")
+        orelse return error.PythonError;
+    errdefer python_c.py_decref(contextvars_module);
+
+    const contextvars_copy: PyObject = python_c.PyObject_GetAttrString(contextvars_module, "copy_context\x00")
+        orelse return error.PythonError;
+    errdefer python_c.py_decref(contextvars_copy);
+
+    instance.contextvars_module = contextvars_module;
+    instance.contextvars_copy = contextvars_copy;
 
     instance.running = false;
     instance.stopping = false;
@@ -47,15 +61,7 @@ pub fn loop_new(
     return @ptrCast(self);
 }
 
-pub fn loop_traverse(self: ?*PythonLoopObject, visit: python_c.visitproc, arg: ?*anyopaque) callconv(.C) c_int {
-    const instance = self.?;
-    return visit.?(@ptrCast(instance), arg);
-}
-
-pub fn loop_clear(self: ?*PythonLoopObject) callconv(.C) c_int {
-    const instance = self.?;
-    const py_loop = instance;
-
+inline fn loop_clear(py_loop: *PythonLoopObject) void {
     if (py_loop.loop_obj) |loop| {
         if (!loop.closed) {
             @panic("Loop is not closed, can't be deallocated");
@@ -66,19 +72,16 @@ pub fn loop_clear(self: ?*PythonLoopObject) callconv(.C) c_int {
         }
 
         allocator.destroy(loop);
-        py_loop.loop_obj = null;
     }
 
     python_c.py_xdecref(py_loop.exception_handler);
-    py_loop.exception_handler = null;
-
-    return 0;
+    python_c.py_xdecref(py_loop.contextvars_module);
+    python_c.py_xdecref(py_loop.contextvars_copy);
 }
 
 pub fn loop_dealloc(self: ?*PythonLoopObject) callconv(.C) void {
     const instance = self.?;
-    // python_c.PyObject_GC_UnTrack(instance);
-    _ = loop_clear(instance);
+    loop_clear(instance);
 
     const @"type": *python_c.PyTypeObject = @ptrCast(python_c.Py_TYPE(@ptrCast(instance)) orelse unreachable);
     @"type".tp_free.?(@ptrCast(instance));

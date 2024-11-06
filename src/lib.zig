@@ -29,8 +29,6 @@ inline fn initialize_leviathan_types() !void {
         if (python_c.PyType_Ready(v) < 0) {
             return error.PythonError;
         }
-
-        // python_c.Py_INCREF(@ptrCast(v));
     }
 }
 
@@ -41,8 +39,6 @@ inline fn deinitialize_leviathan_types() void {
 }
 
 inline fn initialize_python_module() !*python_c.PyObject {
-    // errdefer deinitialize_leviathan_types();
-
     const module: *python_c.PyObject = python_c.PyModule_Create(&leviathan_module) orelse return error.PythonError;
     errdefer python_c.py_decref(module);
 
@@ -60,10 +56,8 @@ inline fn initialize_python_module() !*python_c.PyObject {
         }
     }
 
-    if (builtin.mode == .Debug) {
-        if (python_c.Py_AtExit(&on_module_exit) < 0) {
-            return error.PythonError;
-        }
+    if (python_c.Py_AtExit(&on_module_exit) < 0) {
+        return error.PythonError;
     }
 
     return module;

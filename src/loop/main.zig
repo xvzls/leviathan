@@ -35,6 +35,7 @@ ready_tasks_arena_allocators: [2]std.mem.Allocator = undefined,
 ready_tasks_queues: [2]LinkedList = undefined,
 ready_tasks_queue_to_use: u8 = 0,
 ready_tasks_queue_min_bytes_capacity: usize,
+ready_tasks_queue_max_events_set: usize,
 
 delayed_tasks: DeleyedQueue,
 mutex: std.Thread.Mutex,
@@ -49,10 +50,13 @@ pub fn init(allocator: std.mem.Allocator, rtq_min_capacity: usize) !*Loop {
     const loop = try allocator.create(Loop);
     errdefer allocator.destroy(loop);
 
+    const max_numbers_of_events_set: usize = std.math.log2(rtq_min_capacity / MaxEvents + 1);
+
     loop.* = .{
         .allocator = allocator,
         .mutex = std.Thread.Mutex{},
         .ready_tasks_queue_min_bytes_capacity = rtq_min_capacity,
+        .ready_tasks_queue_max_events_set = max_numbers_of_events_set,
         .delayed_tasks = .{
             .btree = try BTree.init(allocator),
         }

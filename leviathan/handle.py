@@ -24,11 +24,11 @@ class Handle(asyncio.Handle):
 		callback_info = (callback, *args)
 		if thread_safe:
 			handle_leviathan_class = _Handle(
-				callback_info, leviathan_loop, context, exception_handler
+				callback_info, leviathan_loop, context
 			)
 		else:
 			handle_leviathan_class = _HandleSingleThread(
-				callback_info, leviathan_loop, context, exception_handler
+				callback_info, leviathan_loop, context
 			)
 		self._handle_leviathan_class = handle_leviathan_class
 		self._loop = loop

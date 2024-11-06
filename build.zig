@@ -7,6 +7,12 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const jdz_allocator = b.dependency("jdz_allocator", .{
+        .target = target,
+        .optimize = optimize
+    });
+    const jdz_allocator_module = jdz_allocator.module("jdz_allocator");
+
     const leviathan_module = b.addModule("leviathan", .{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
@@ -24,6 +30,7 @@ pub fn build(b: *std.Build) void {
     });
     python_lib.linkSystemLibrary("python3.12");
     python_lib.linkLibC();
+    python_lib.root_module.addImport("jdz_allocator", jdz_allocator_module);
 
     const python_lib_single_thread = b.addSharedLibrary(.{
         .name = "leviathan_single_thread",
@@ -37,6 +44,7 @@ pub fn build(b: *std.Build) void {
     });
     python_lib_single_thread.linkSystemLibrary("python3.12");
     python_lib_single_thread.linkLibC();
+    python_lib_single_thread.root_module.addImport("jdz_allocator", jdz_allocator_module);
 
     const compile_python_lib = b.addInstallArtifact(python_lib, .{});
     const compile_single_thread_python_lib = b.addInstallArtifact(python_lib_single_thread, .{});

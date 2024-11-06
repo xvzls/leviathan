@@ -18,7 +18,7 @@ loop: *Loop,
 
 py_handle: ?*Handle.PythonHandleObject,
 
-pub fn init(
+pub inline fn init(
     allocator: std.mem.Allocator, py_handle: ?*Handle.PythonHandleObject, loop: *Loop,
     callback: ?HandleCallback, data: ?*anyopaque
 ) !*Handle {

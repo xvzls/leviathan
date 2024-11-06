@@ -2,16 +2,18 @@ const std = @import("std");
 const builtin = @import("builtin");
 
 const python_c = @import("python_c.zig");
+const jdz_allocator = @import("jdz_allocator");
 
 
-pub var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-pub const allocator: std.mem.Allocator = bk: {
+pub var gpa = blk: {
     if (builtin.mode == .Debug) {
-        break :bk gpa.allocator(); 
+        break :blk std.heap.GeneralPurposeAllocator(.{}){};
     }else{
-        break :bk std.heap.c_allocator;
+        break :blk jdz_allocator.JdzAllocator(.{}).init();
     }
 };
+
+pub const allocator: std.mem.Allocator = gpa.allocator();
 
 pub inline fn put_python_runtime_error_message(msg: [:0]const u8) void {
     python_c.PyErr_SetString(

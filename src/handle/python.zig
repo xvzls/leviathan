@@ -9,22 +9,22 @@ const Loop = @import("../loop/main.zig");
 
 const std = @import("std");
 
-pub const LEVIATHAN_HANDLE_MAGIC = 0x48414E444C450001;
-
 pub const PythonHandleObject = extern struct {
     ob_base: python_c.PyObject,
-    magic: u64,
     handle_obj: ?*Handle,
 
     exception_handler: ?PyObject,
     contextvars: ?PyObject,
     py_callback: ?PyObject,
     py_loop: ?*Loop.constructors.PythonLoopObject,
-    args: ?PyObject
+    args: ?[*]PyObject,
+    nargs: usize
 };
 
 pub inline fn callback_for_python_methods(py_handle: *PythonHandleObject) bool {
-    const ret: ?PyObject = python_c.PyObject_CallObject(py_handle.py_callback.?, py_handle.args.?);
+    const ret: ?PyObject = python_c.PyObject_Vectorcall(
+        py_handle.py_callback.?, py_handle.args, @intCast(py_handle.nargs), null
+    );
     if (ret) |value| {
         python_c.py_decref(value);
     }else{
@@ -46,19 +46,39 @@ pub inline fn callback_for_python_methods(py_handle: *PythonHandleObject) bool {
     return false;
 }
 
+pub inline fn fast_new_handle(
+    loop: *Loop.constructors.PythonLoopObject, contextvars: PyObject,
+    callback_info: []PyObject
+) !*PythonHandleObject {
+    const instance: *PythonHandleObject = @ptrCast(
+        PythonHandleType.tp_alloc.?(&PythonHandleType, 0) orelse return error.PythonError
+    );
+    errdefer PythonHandleType.tp_free.?(instance);
+
+    const contextvars_run_func: PyObject = python_c.PyObject_GetAttrString(contextvars, "run\x00")
+        orelse return error.PythonError;
+    errdefer python_c.py_decref(contextvars_run_func);
+
+    instance.handle_obj = try Handle.init(
+        allocator, instance, loop.loop_obj.?, null, null
+    );
+
+    instance.exception_handler = python_c.py_newref(loop.exception_handler.?);
+    instance.contextvars = contextvars;
+    instance.py_callback = contextvars_run_func;
+    instance.py_loop = python_c.py_newref(loop);
+    instance.args = callback_info.ptr;
+    instance.nargs = callback_info.len;
+
+    return instance;
+}
+
 inline fn z_handle_new(
     @"type": *python_c.PyTypeObject, _: ?PyObject,
     _: ?PyObject
 ) !*PythonHandleObject {
-    // _ = @"type";
-    // const instance: *PythonHandleObject = try allocator.create(PythonHandleObject);
-    // errdefer allocator.destroy(instance);
     const instance: *PythonHandleObject = @ptrCast(@"type".tp_alloc.?(@"type", 0) orelse return error.PythonError);
     errdefer @"type".tp_free.?(instance);
-    //
-    //
-    // instance.* = std.mem.zeroes(PythonHandleObject);
-    instance.magic = LEVIATHAN_HANDLE_MAGIC;
     instance.handle_obj = null;
 
     return instance;
@@ -74,72 +94,31 @@ fn handle_new(
     return @ptrCast(self);
 }
 
-fn handle_traverse(self: ?*PythonHandleObject, visit: python_c.visitproc, arg: ?*anyopaque) callconv(.C) c_int {
-    const instance = self.?;
-    if (utils.check_leviathan_python_object(instance, LEVIATHAN_HANDLE_MAGIC)) {
-        return -1;
-    }
-
-    const objects = .{
-        instance.exception_handler,
-        instance.contextvars,
-        instance.py_callback,
-        instance.args
-    };
-    
-    inline for (objects) |object| {
-        if (object) |obj| {
-            const ret = visit.?(obj, arg);
-            if (ret != 0) {
-                return ret;
-            }
-        }
-    }
-
-    if (instance.py_loop) |loop| {
-        const ret = visit.?(@ptrCast(loop), arg);
-        if (ret != 0) {
-            return ret;
-        }
-    }
-
-    return 0;
-}
-
-fn handle_clear(self: ?*PythonHandleObject) callconv(.C) c_int {
-    const py_handle = self.?;
-
+inline fn handle_clear(py_handle: *PythonHandleObject) void {
     if (py_handle.handle_obj) |handle| {
         allocator.destroy(handle);
-        py_handle.handle_obj = null;
+    }
+
+    if (py_handle.args) |args| {
+        const args_slice = args[0..py_handle.nargs];
+        for (args_slice) |arg| {
+            python_c.py_decref(arg);
+        }
+        allocator.free(args_slice);
     }
 
     python_c.py_xdecref(py_handle.contextvars);
-    py_handle.contextvars = null;
-
     python_c.py_xdecref(py_handle.py_callback);
-    py_handle.py_callback = null;
-
     python_c.py_xdecref(@ptrCast(py_handle.py_loop));
-    py_handle.py_loop = null;
-
-    python_c.py_xdecref(py_handle.args);
-    py_handle.args = null;
-
     python_c.py_xdecref(py_handle.exception_handler);
-    py_handle.exception_handler = null;
-
-    return 0;
 }
 
 fn handle_dealloc(self: ?*PythonHandleObject) void {
     const instance = self.?;
-    _ = handle_clear(instance);
+    handle_clear(instance);
 
     const @"type": *python_c.PyTypeObject = @ptrCast(python_c.Py_TYPE(@ptrCast(instance)) orelse unreachable);
     @"type".tp_free.?(@ptrCast(instance));
-
-    // allocator.destroy(instance);
 }
 
 inline fn z_handle_init(
@@ -162,7 +141,9 @@ inline fn z_handle_init(
     }
 
     if (python_c.PyObject_TypeCheck(py_loop.?, &Loop.PythonLoopType) == 0) {
-        utils.put_python_runtime_error_message("Invalid asyncio event loop. Only Leviathan's event loops are allowed\x00");
+        utils.put_python_runtime_error_message(
+            "Invalid asyncio event loop. Only Leviathan's event loops are allowed\x00"
+        );
         return error.PythonError;
     }
     const leviathan_loop: *Loop.constructors.PythonLoopObject = @ptrCast(py_loop.?);
@@ -178,6 +159,27 @@ inline fn z_handle_init(
         return error.PythonError;
     }
 
+    const args_num = python_c.PyTuple_Size(py_callback_args.?);
+    if (args_num < 0) {
+        return error.PythonError;
+    }
+
+    const callback_info = try allocator.alloc(PyObject, @intCast(args_num));
+    errdefer allocator.free(callback_info);
+
+    for (0..@intCast(args_num)) |i| {
+        callback_info[i] = python_c.py_newref(
+            @as(PyObject, @ptrCast(
+                python_c.PyTuple_GetItem(py_callback_args.?, @intCast(i)) orelse return error.PythonError
+            ))
+        );
+    }
+    errdefer {
+        for (callback_info[0..@intCast(args_num)]) |arg| {
+            python_c.py_decref(arg);
+        }
+    }
+
     self.handle_obj = try Handle.init(
         allocator, self, leviathan_loop.loop_obj.?, null, null
     );
@@ -186,7 +188,8 @@ inline fn z_handle_init(
     self.py_callback = contextvars_run_func;
     self.py_loop = leviathan_loop;
     self.contextvars = python_c.py_newref(py_context.?);
-    self.args = python_c.py_newref(py_callback_args.?);
+    self.args = callback_info.ptr;
+    self.nargs = callback_info.len;
 
     return 0;
 }

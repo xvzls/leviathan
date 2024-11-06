@@ -14,7 +14,10 @@ const CallOnceReturn = enum {
 };
 
 
-inline fn call_once(_: usize, queue: *LinkedList, arena: *std.heap.ArenaAllocator) CallOnceReturn {
+inline fn call_once(
+    max_number_of_events_set: usize, queue: *LinkedList,
+    arena: *std.heap.ArenaAllocator
+) CallOnceReturn {
     var _node: ?LinkedList.Node = queue.first orelse return .Stop;
 
     var can_execute: bool = true;
@@ -30,6 +33,14 @@ inline fn call_once(_: usize, queue: *LinkedList, arena: *std.heap.ArenaAllocato
             }
         }
         events_set.events_num = 0;
+    }
+
+    var queue_len = queue.len;
+    if (queue_len > max_number_of_events_set) {
+        while (queue_len > max_number_of_events_set) |queue_len -= 1| {
+            const node = queue.pop_node();
+            const events_set = queue.pop().?
+        }
     }
 
     // TODO: Clear queue to ready_tasks_queue_min_bytes_capacity
@@ -79,15 +90,14 @@ pub fn run_forever(self: *Loop) !void {
     const ready_tasks_arenas: []std.heap.ArenaAllocator = &self.ready_tasks_arenas;
     const ready_tasks_queue_min_bytes_capacity = self.ready_tasks_queue_min_bytes_capacity;
     while (!self.stopping) {
-        defer {
-            ready_tasks_queue_to_use = 1 - ready_tasks_queue_to_use;
-            self.ready_tasks_queue_to_use = ready_tasks_queue_to_use;
-        }
+        const old_index = ready_tasks_queue_to_use;
+        ready_tasks_queue_to_use = 1 - ready_tasks_queue_to_use;
+        self.ready_tasks_queue_to_use = ready_tasks_queue_to_use;
 
         switch (
             call_once(
-                ready_tasks_queue_min_bytes_capacity, &ready_tasks_queues[ready_tasks_queue_to_use],
-                &ready_tasks_arenas[ready_tasks_queue_to_use]
+                ready_tasks_queue_min_bytes_capacity, &ready_tasks_queues[old_index],
+                &ready_tasks_arenas[old_index]
             )
         ) {
             .Continue => {},

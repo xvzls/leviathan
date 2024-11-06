@@ -27,6 +27,7 @@ pub inline fn call_soon(self: *Loop, handle: *Handle) !void {
     errdefer allocator.destroy(events);
 
     const events_arr = try allocator.alloc(*Handle, Loop.MaxEvents * std.math.pow(usize, 2, queue.len));
+    errdefer allocator.free(events_arr);
     events.events_num = 1;
     events_arr[0] = handle;
     events.events = events_arr;

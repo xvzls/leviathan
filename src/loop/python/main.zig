@@ -36,10 +36,10 @@ const PythonLoopMethods: []const python_c.PyMethodDef = &[_]python_c.PyMethodDef
         .ml_flags = python_c.METH_NOARGS
     },
     python_c.PyMethodDef{
-        .ml_name = "_call_soon\x00",
+        .ml_name = "call_soon\x00",
         .ml_meth = @ptrCast(&scheduling.loop_call_soon),
         .ml_doc = "Schedule callback to be called with args arguments at the next iteration of the event loop.\x00",
-        .ml_flags = python_c.METH_FASTCALL
+        .ml_flags = python_c.METH_FASTCALL | python_c.METH_KEYWORDS
     },
     python_c.PyMethodDef{
         .ml_name = null, .ml_meth = null, .ml_doc = null, .ml_flags = 0

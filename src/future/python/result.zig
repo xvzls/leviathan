@@ -3,7 +3,6 @@ const PyObject = *python_c.PyObject;
 
 const constructors = @import("constructors.zig");
 const PythonFutureObject = constructors.PythonFutureObject;
-const LEVIATHAN_FUTURE_MAGIC = constructors.LEVIATHAN_FUTURE_MAGIC;
 
 const utils = @import("../../utils/utils.zig");
 
