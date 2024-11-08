@@ -23,19 +23,22 @@ pub const EventType = enum {
 
 pub const MaxEvents = std.mem.page_size / @sizeOf(*Handle);
 
-pub const EventSet = struct {
+pub const EventsSet = struct {
     events_num: usize = 0,
     events: []*Handle,
 };
 
 allocator: std.mem.Allocator,
 
-ready_tasks_arenas: [2]std.heap.ArenaAllocator = undefined,
-ready_tasks_arena_allocators: [2]std.mem.Allocator = undefined,
-ready_tasks_queues: [2]LinkedList = undefined,
-ready_tasks_queue_to_use: u8 = 0,
+ready_tasks_queue_index: u8 = 0,
+
+temporal_handles_arenas: [2]std.heap.ArenaAllocator,
+temporal_handles_arena_allocators: [2]std.mem.Allocator = undefined,
+
+ready_tasks_queues: [2]LinkedList,
+
+max_events_sets_per_queue: [2]usize,
 ready_tasks_queue_min_bytes_capacity: usize,
-ready_tasks_queue_max_events_set: usize,
 
 delayed_tasks: DeleyedQueue,
 mutex: std.Thread.Mutex,
@@ -50,42 +53,59 @@ pub fn init(allocator: std.mem.Allocator, rtq_min_capacity: usize) !*Loop {
     const loop = try allocator.create(Loop);
     errdefer allocator.destroy(loop);
 
-    const max_numbers_of_events_set: usize = std.math.log2(rtq_min_capacity / MaxEvents + 1);
+    const max_events_sets_per_queue = get_max_events_sets(rtq_min_capacity, MaxEvents);
 
     loop.* = .{
         .allocator = allocator,
         .mutex = std.Thread.Mutex{},
+        .temporal_handles_arenas = .{
+            std.heap.ArenaAllocator.init(allocator),
+            std.heap.ArenaAllocator.init(allocator),
+        },
+        .ready_tasks_queues = .{
+            LinkedList.init(allocator),
+            LinkedList.init(allocator),
+        },
+        .max_events_sets_per_queue = .{
+            max_events_sets_per_queue,
+            max_events_sets_per_queue,
+        },
         .ready_tasks_queue_min_bytes_capacity = rtq_min_capacity,
-        .ready_tasks_queue_max_events_set = max_numbers_of_events_set,
         .delayed_tasks = .{
             .btree = try BTree.init(allocator),
         }
     };
 
-    loop.ready_tasks_arenas[0] = std.heap.ArenaAllocator.init(allocator);
-    loop.ready_tasks_arenas[1] = std.heap.ArenaAllocator.init(allocator);
-
-    loop.ready_tasks_arena_allocators[0] = loop.ready_tasks_arenas[0].allocator();
-    loop.ready_tasks_arena_allocators[1] = loop.ready_tasks_arenas[1].allocator();
-
-    loop.ready_tasks_queues[0] = LinkedList.init(allocator);
-    loop.ready_tasks_queues[1] = LinkedList.init(allocator);
+    loop.temporal_handles_arena_allocators[0] = loop.temporal_handles_arenas[0].allocator();
+    loop.temporal_handles_arena_allocators[1] = loop.temporal_handles_arenas[1].allocator();
 
     return loop;
+}
+
+pub inline fn get_max_events_sets(rtq_min_capacity: usize, events_set_length: usize) usize {
+    return @max(
+        @as(usize, @intFromFloat(
+            @ceil(
+                @log2(
+                    @as(f64, @floatFromInt(rtq_min_capacity)) / @as(f64, @floatFromInt(events_set_length * @sizeOf(*Handle))) + 1.0
+                )
+            )
+        )), 2
+    );
 }
 
 pub fn release(self: *Loop) void {
     if (self.closed) @panic("Loop is already closed");
 
-    inline for (&self.ready_tasks_arenas) |*ready_tasks_arena| {
-        ready_tasks_arena.deinit();
+    inline for (&self.temporal_handles_arenas) |*temporal_handles_arena| {
+        temporal_handles_arena.deinit();
     }
 
     const allocator = self.allocator;
     for (&self.ready_tasks_queues) |*ready_tasks_queue| {
         var node = ready_tasks_queue.first;
         while (node) |n| {
-            const events_set: *EventSet = @alignCast(@ptrCast(n.data.?));
+            const events_set: *EventsSet = @alignCast(@ptrCast(n.data.?));
             allocator.free(events_set.events);
             allocator.destroy(events_set);
             node = n.next;

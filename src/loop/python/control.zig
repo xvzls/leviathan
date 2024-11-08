@@ -70,10 +70,10 @@ pub fn loop_close(self: ?*PythonLoopObject, _: ?PyObject) callconv(.C) ?PyObject
             return null;
         }
 
-        const queue = &loop_obj.ready_tasks_queues[loop_obj.ready_tasks_queue_to_use];
+        const queue = &loop_obj.ready_tasks_queues[loop_obj.ready_tasks_queue_index];
         var node = queue.first;
         while (node) |n| {
-            const events_set: *Loop.EventSet = @alignCast(@ptrCast(n.data.?));
+            const events_set: *Loop.EventsSet = @alignCast(@ptrCast(n.data.?));
             for (events_set.events[0..events_set.events_num]) |handle| {
                 handle.cancel();
             }

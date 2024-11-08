@@ -7,9 +7,9 @@ const LinkedList = @import("../utils/linked_list.zig");
 const std = @import("std");
 
 pub inline fn call_soon(self: *Loop, handle: *Handle) !void {
-    const queue = &self.ready_tasks_queues[self.ready_tasks_queue_to_use];
+    const queue = &self.ready_tasks_queues[self.ready_tasks_queue_index];
 
-    var events: *Loop.EventSet = undefined;
+    var events: *Loop.EventsSet = undefined;
     var node = queue.first;
     while (node) |n| {
         events = @alignCast(@ptrCast(n.data.?));
@@ -23,7 +23,7 @@ pub inline fn call_soon(self: *Loop, handle: *Handle) !void {
     }
 
     const allocator = self.allocator;
-    events = try allocator.create(Loop.EventSet);
+    events = try allocator.create(Loop.EventsSet);
     errdefer allocator.destroy(events);
 
     const events_arr = try allocator.alloc(*Handle, Loop.MaxEvents * std.math.pow(usize, 2, queue.len));
@@ -38,7 +38,7 @@ pub inline fn call_soon(self: *Loop, handle: *Handle) !void {
 pub inline fn call_soon_without_handle(
     self: *Loop, callback: Handle.HandleCallback, data: ?*anyopaque
 ) !void {
-    const allocator = self.ready_tasks_arena_allocators[self.ready_tasks_queue_to_use];
+    const allocator = self.ready_tasks_arena_allocators[self.ready_tasks_queue_index];
 
     const handle = try allocator.create(Handle);
     errdefer allocator.destroy(handle);
@@ -51,7 +51,7 @@ pub inline fn call_soon_without_handle(
 pub inline fn extend_ready_tasks(self: *Loop, new_tasks: *LinkedList) void {
     if (new_tasks.len == 0) return;
 
-    const queue = &self.ready_tasks_queues[self.ready_tasks_queue_to_use];
+    const queue = &self.ready_tasks_queues[self.ready_tasks_queue_index];
     if (queue.last) |last| {
         last.next = new_tasks.first;
     }else{

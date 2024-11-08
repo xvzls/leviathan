@@ -4,6 +4,7 @@ const Handle = @import("../handle/main.zig");
 const Loop = @import("main.zig");
 
 const utils = @import("../utils/utils.zig");
+const allocator = utils.allocator;
 const python_c = @import("../utils/python_c.zig");
 const PyObject = *python_c.PyObject;
 
@@ -13,17 +14,43 @@ const CallOnceReturn = enum {
     Continue, Stop, Exception
 };
 
+inline fn remove_exceded_events(loop: *Loop, index: usize, queue: *LinkedList, max_number_of_events_set: usize) void {
+    var queue_len = queue.len;
+    if (queue_len <= max_number_of_events_set) return;
+
+    var node = queue.first.?;
+    while (queue_len > max_number_of_events_set) : (queue_len -= 1) {
+        const events_set: *Loop.EventsSet = @alignCast(@ptrCast(node.data.?));
+
+        allocator.free(events_set.events);
+        allocator.destroy(events_set);
+
+        const next_node = node.next.?;
+        allocator.destroy(node);
+        node = next_node;
+    }
+
+    const events_set: *Loop.EventsSet = @alignCast(@ptrCast(node.data.?));
+    node.prev = null;
+    queue.first = node;
+    queue.len = queue_len;
+
+    loop.max_events_sets_per_queue[index] = Loop.get_max_events_sets(
+        loop.ready_tasks_queue_min_bytes_capacity, events_set.events.len
+    );
+}
+
 
 inline fn call_once(
-    max_number_of_events_set: usize, queue: *LinkedList,
-    arena: *std.heap.ArenaAllocator
+    loop: *Loop, index: usize, max_number_of_events_set: usize,
+    queue: *LinkedList, arena: *std.heap.ArenaAllocator
 ) CallOnceReturn {
     var _node: ?LinkedList.Node = queue.first orelse return .Stop;
 
     var can_execute: bool = true;
     while (_node) |node| {
         _node = node.next;
-        const events_set: *Loop.EventSet = @alignCast(@ptrCast(node.data.?));
+        const events_set: *Loop.EventsSet = @alignCast(@ptrCast(node.data.?));
         const events_num = events_set.events_num;
         if (events_num == 0) return .Stop;
 
@@ -35,15 +62,7 @@ inline fn call_once(
         events_set.events_num = 0;
     }
 
-    var queue_len = queue.len;
-    if (queue_len > max_number_of_events_set) {
-        while (queue_len > max_number_of_events_set) |queue_len -= 1| {
-            const node = queue.pop_node();
-            const events_set = queue.pop().?
-        }
-    }
-
-    // TODO: Clear queue to ready_tasks_queue_min_bytes_capacity
+    remove_exceded_events(loop, index, queue, max_number_of_events_set);
     _ = arena.reset(.free_all);
 
     if (!can_execute) {
@@ -85,19 +104,19 @@ pub fn run_forever(self: *Loop) !void {
         mutex.unlock();
     }
 
-    var ready_tasks_queue_to_use = self.ready_tasks_queue_to_use;
+    var ready_tasks_queue_index = self.ready_tasks_queue_index;
     const ready_tasks_queues: []LinkedList = &self.ready_tasks_queues;
-    const ready_tasks_arenas: []std.heap.ArenaAllocator = &self.ready_tasks_arenas;
-    const ready_tasks_queue_min_bytes_capacity = self.ready_tasks_queue_min_bytes_capacity;
+    const temporal_handles_arenas: []std.heap.ArenaAllocator = &self.temporal_handles_arenas;
+    const max_events_set_per_queue: []usize = &self.max_events_sets_per_queue;
     while (!self.stopping) {
-        const old_index = ready_tasks_queue_to_use;
-        ready_tasks_queue_to_use = 1 - ready_tasks_queue_to_use;
-        self.ready_tasks_queue_to_use = ready_tasks_queue_to_use;
+        const old_index = ready_tasks_queue_index;
+        ready_tasks_queue_index = 1 - ready_tasks_queue_index;
+        self.ready_tasks_queue_index = ready_tasks_queue_index;
 
         switch (
             call_once(
-                ready_tasks_queue_min_bytes_capacity, &ready_tasks_queues[old_index],
-                &ready_tasks_arenas[old_index]
+                self, old_index, max_events_set_per_queue[old_index], &ready_tasks_queues[old_index],
+                &temporal_handles_arenas[old_index]
             )
         ) {
             .Continue => {},
