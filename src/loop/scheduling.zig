@@ -1,4 +1,3 @@
-const Handle = @import("../handle/main.zig");
 const Loop = @import("main.zig");
 
 const LinkedList = @import("../utils/linked_list.zig");
@@ -6,46 +5,40 @@ const LinkedList = @import("../utils/linked_list.zig");
 
 const std = @import("std");
 
-pub inline fn call_soon(self: *Loop, handle: *Handle) !void {
-    const queue = &self.ready_tasks_queues[self.ready_tasks_queue_index];
+pub inline fn call_soon(self: *Loop, callback: Loop.Callback) !void {
+    const ready_queue = &self.ready_tasks_queues[self.ready_tasks_queue_index];
 
-    var events: *Loop.EventsSet = undefined;
-    var node = queue.first;
+    var callbacks: *Loop.CallbacksSet = undefined;
+    var last_callbacks_set_len: usize = Loop.MaxCallbacks;
+    var node = ready_queue.last_node;
     while (node) |n| {
-        events = @alignCast(@ptrCast(n.data.?));
-        const events_num = events.events_num;
-        if (events_num < events.events.len) {
-            events.events[events_num] = handle;
-            events.events_num = events_num + 1;
+        callbacks = @alignCast(@ptrCast(n.data.?));
+        const callbacks_num = callbacks.callbacks_num;
+
+        if (callbacks_num < callbacks.callbacks.len) {
+            callbacks.callbacks[callbacks_num] = callback;
+            callbacks.callbacks_num = callbacks_num + 1;
+
+            ready_queue.last_node = n;
             return;
         }
+        last_callbacks_set_len = callbacks_num;
         node = n.next;
     }
 
     const allocator = self.allocator;
-    events = try allocator.create(Loop.EventsSet);
-    errdefer allocator.destroy(events);
+    callbacks = try allocator.create(Loop.CallbacksSet);
+    errdefer allocator.destroy(callbacks);
 
-    const events_arr = try allocator.alloc(*Handle, Loop.MaxEvents * std.math.pow(usize, 2, queue.len));
-    errdefer allocator.free(events_arr);
-    events.events_num = 1;
-    events_arr[0] = handle;
-    events.events = events_arr;
+    const callbacks_arr = try allocator.alloc(Loop.Callback, last_callbacks_set_len * 2);
+    errdefer allocator.free(callbacks_arr);
 
-    try queue.append(events);
-}
+    callbacks.callbacks_num = 1;
+    callbacks_arr[0] = callback;
+    callbacks.callbacks = callbacks_arr;
 
-pub inline fn call_soon_without_handle(
-    self: *Loop, callback: Handle.HandleCallback, data: ?*anyopaque
-) !void {
-    const allocator = self.ready_tasks_arena_allocators[self.ready_tasks_queue_index];
-
-    const handle = try allocator.create(Handle);
-    errdefer allocator.destroy(handle);
-
-    handle.init(self, allocator, callback, data, false);
-
-    try self.call_soon(handle);
+    try ready_queue.queue.append(callbacks);
+    ready_queue.last_node = ready_queue.queue.last;
 }
 
 pub inline fn extend_ready_tasks(self: *Loop, new_tasks: *LinkedList) void {
@@ -64,20 +57,11 @@ pub inline fn extend_ready_tasks(self: *Loop, new_tasks: *LinkedList) void {
     new_tasks.len = 0;
 }
 
-pub inline fn call_soon_threadsafe(self: *Loop, handle: *Handle) !void {
+pub inline fn call_soon_threadsafe(self: *Loop, callback: Loop.Callback) !void {
     const mutex = &self.mutex;
     mutex.lock();
     defer mutex.unlock();
-    try self.call_soon(handle);
-}
-
-pub inline fn call_soon_without_handle_threadsafe(
-    self: *Loop, callback: Handle.HandleCallback, data: ?*anyopaque
-) !void {
-    const mutex = &self.mutex;
-    mutex.lock();
-    defer mutex.unlock();
-    try self.call_soon_without_handle(callback, data);
+    try self.call_soon(callback);
 }
 
 pub inline fn extend_ready_tasks_threadsafe(self: *Loop, new_tasks: *LinkedList) void {

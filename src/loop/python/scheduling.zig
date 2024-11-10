@@ -5,7 +5,7 @@ const utils = @import("../../utils/utils.zig");
 const allocator = utils.allocator;
 
 const Loop = @import("../main.zig");
-const Handle = @import("../../handle/main.zig");
+const Handle = @import("../../handle.zig");
 
 const constructors = @import("constructors.zig");
 const PythonLoopObject = constructors.PythonLoopObject;
@@ -13,10 +13,7 @@ const LEVIATHAN_LOOP_MAGIC = constructors.LEVIATHAN_LOOP_MAGIC;
 
 const std = @import("std");
 
-inline fn z_loop_call_soon(
-    self: *PythonLoopObject, args: []?PyObject,
-    knames: ?PyObject
-) !*Handle.PythonHandleObject {
+inline fn get_py_context(knames: ?PyObject, args: []?PyObject, loop: *PythonLoopObject) !PyObject {
     var context: ?PyObject = null;
     if (knames) |kwargs| {
         const kwargs_len = python_c.PyTuple_Size(kwargs);
@@ -36,12 +33,14 @@ inline fn z_loop_call_soon(
         }
     }
 
-    if (context == null) {
-        context = python_c.PyObject_CallNoArgs(self.contextvars_copy.?) orelse return error.PythonError;
+    if (context) |v| {
+        return v;
+    }else{
+        return python_c.PyObject_CallNoArgs(loop.contextvars_copy.?) orelse return error.PythonError;
     }
+}
 
-    errdefer python_c.py_decref(@ptrCast(context.?));
-
+inline fn get_callback_info(args: []?PyObject) ![]PyObject {
     const callback_info = try allocator.alloc(PyObject, args.len);
     errdefer allocator.free(callback_info);
 
@@ -59,7 +58,31 @@ inline fn z_loop_call_soon(
         return error.PythonError;
     }
 
-    const py_handle: *Handle.PythonHandleObject = try Handle.fast_new_handle(self, context.?, callback_info);
+    return callback_info;
+}
+
+inline fn z_loop_call_soon(
+    self: *PythonLoopObject, args: []?PyObject,
+    knames: ?PyObject
+) !*Handle.PythonHandleObject {
+    const context = try get_py_context(knames, args, self);
+    errdefer python_c.py_decref(context);
+
+    const callback_info = try get_callback_info(args);
+    errdefer {
+        for (callback_info) |arg| {
+            python_c.py_decref(@ptrCast(arg));
+        }
+        allocator.free(callback_info);
+    }
+
+    const contextvars_run_func: PyObject = python_c.PyObject_GetAttrString(context, "run\x00")
+        orelse return error.PythonError;
+    errdefer python_c.py_decref(contextvars_run_func);
+
+    const py_handle: *Handle.PythonHandleObject = try Handle.fast_new_handle(context);
+    errdefer python_c.py_decref(@ptrCast(py_handle));
+
     const loop_obj = self.loop_obj.?;
 
     const mutex = &loop_obj.mutex;
@@ -76,7 +99,15 @@ inline fn z_loop_call_soon(
         return error.PythonError;
     }
 
-    try loop_obj.call_soon(py_handle.handle_obj.?);
+    try loop_obj.call_soon(.{
+        .PythonGeneric = .{
+            .args = callback_info,
+            .exception_handler = self.exception_handler.?,
+            .py_callback = contextvars_run_func,
+            .py_handle = py_handle,
+            .cancelled = &py_handle.cancelled
+        }
+    });
     return python_c.py_newref(py_handle);
 }
 

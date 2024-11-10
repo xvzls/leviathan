@@ -7,25 +7,15 @@ const LinkedList = @import("../utils/linked_list.zig");
 const BTree = @import("../utils/btree/btree.zig");
 const NoOpMutex = @import("../utils/no_op_mutex.zig");
 
-const Handle = @import("../handle/main.zig");
-
-
 pub const DeleyedQueue = struct {
     btree: *BTree,
     min_delay: ?u64 = null,
     min_node: ?*BTree.Node = null,
 };
 
-pub const EventType = enum {
-    INMEDIATE,
-    DELAYED
-};
-
-pub const MaxEvents = std.mem.page_size / @sizeOf(*Handle);
-
-pub const EventsSet = struct {
-    events_num: usize = 0,
-    events: []*Handle,
+pub const ReadyQueue = struct {
+    queue: LinkedList,
+    last_node: ?LinkedList.Node
 };
 
 allocator: std.mem.Allocator,
@@ -35,9 +25,9 @@ ready_tasks_queue_index: u8 = 0,
 temporal_handles_arenas: [2]std.heap.ArenaAllocator,
 temporal_handles_arena_allocators: [2]std.mem.Allocator = undefined,
 
-ready_tasks_queues: [2]LinkedList,
+ready_tasks_queues: [2]ReadyQueue,
 
-max_events_sets_per_queue: [2]usize,
+max_callbacks_sets_per_queue: [2]usize,
 ready_tasks_queue_min_bytes_capacity: usize,
 
 delayed_tasks: DeleyedQueue,
@@ -53,7 +43,7 @@ pub fn init(allocator: std.mem.Allocator, rtq_min_capacity: usize) !*Loop {
     const loop = try allocator.create(Loop);
     errdefer allocator.destroy(loop);
 
-    const max_events_sets_per_queue = get_max_events_sets(rtq_min_capacity, MaxEvents);
+    const max_callbacks_sets_per_queue = Loop.get_max_callbacks_sets(rtq_min_capacity, Loop.MaxCallbacks);
 
     loop.* = .{
         .allocator = allocator,
@@ -63,12 +53,18 @@ pub fn init(allocator: std.mem.Allocator, rtq_min_capacity: usize) !*Loop {
             std.heap.ArenaAllocator.init(allocator),
         },
         .ready_tasks_queues = .{
-            LinkedList.init(allocator),
-            LinkedList.init(allocator),
+            .{
+                .queue = LinkedList.init(allocator),
+                .last_node = null,
+            },
+            .{
+                .queue = LinkedList.init(allocator),
+                .last_node = null,
+            },
         },
-        .max_events_sets_per_queue = .{
-            max_events_sets_per_queue,
-            max_events_sets_per_queue,
+        .max_callbacks_sets_per_queue = .{
+            max_callbacks_sets_per_queue,
+            max_callbacks_sets_per_queue,
         },
         .ready_tasks_queue_min_bytes_capacity = rtq_min_capacity,
         .delayed_tasks = .{
@@ -82,18 +78,6 @@ pub fn init(allocator: std.mem.Allocator, rtq_min_capacity: usize) !*Loop {
     return loop;
 }
 
-pub inline fn get_max_events_sets(rtq_min_capacity: usize, events_set_length: usize) usize {
-    return @max(
-        @as(usize, @intFromFloat(
-            @ceil(
-                @log2(
-                    @as(f64, @floatFromInt(rtq_min_capacity)) / @as(f64, @floatFromInt(events_set_length * @sizeOf(*Handle))) + 1.0
-                )
-            )
-        )), 2
-    );
-}
-
 pub fn release(self: *Loop) void {
     if (self.closed) @panic("Loop is already closed");
 
@@ -103,11 +87,14 @@ pub fn release(self: *Loop) void {
 
     const allocator = self.allocator;
     for (&self.ready_tasks_queues) |*ready_tasks_queue| {
-        var node = ready_tasks_queue.first;
+        var node = ready_tasks_queue.queue.first;
         while (node) |n| {
-            const events_set: *EventsSet = @alignCast(@ptrCast(n.data.?));
-            allocator.free(events_set.events);
-            allocator.destroy(events_set);
+            const callbacks_set: *Loop.CallbacksSet = @alignCast(@ptrCast(n.data.?));
+            for (callbacks_set.callbacks[0..callbacks_set.callbacks_num]) |callback| {
+                _ = Loop.run_callback(callback, false);
+            }
+            allocator.free(callbacks_set.callbacks);
+            allocator.destroy(callbacks_set);
             node = n.next;
             allocator.destroy(n);
         }
@@ -122,6 +109,7 @@ pub fn release(self: *Loop) void {
 
 pub usingnamespace @import("control.zig");
 pub usingnamespace @import("scheduling.zig");
+pub usingnamespace @import("callbacks/main.zig");
 pub usingnamespace @import("python/main.zig");
 
 const Loop = @This();

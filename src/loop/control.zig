@@ -1,6 +1,5 @@
 const LinkedList = @import("../utils/linked_list.zig");
 
-const Handle = @import("../handle/main.zig");
 const Loop = @import("main.zig");
 
 const utils = @import("../utils/utils.zig");
@@ -14,55 +13,73 @@ const CallOnceReturn = enum {
     Continue, Stop, Exception
 };
 
-inline fn remove_exceded_events(loop: *Loop, index: usize, queue: *LinkedList, max_number_of_events_set: usize) void {
+inline fn free_callbacks_set(node: LinkedList.Node, comptime field_name: []const u8) LinkedList.Node {
+    const callbacks_set: *Loop.CallbacksSet = @alignCast(@ptrCast(node.data.?));
+    allocator.free(callbacks_set.callbacks);
+    allocator.destroy(callbacks_set);
+
+    const next_node = @field(node, field_name).?;
+    allocator.destroy(node);
+
+    return next_node;
+}
+
+inline fn remove_exceded_callbacks(loop: *Loop, index: usize, queue: *LinkedList, max_number_of_callbacks_set: usize) void {
     var queue_len = queue.len;
-    if (queue_len <= max_number_of_events_set) return;
+    if (queue_len <= max_number_of_callbacks_set) return;
 
-    var node = queue.first.?;
-    while (queue_len > max_number_of_events_set) : (queue_len -= 1) {
-        const events_set: *Loop.EventsSet = @alignCast(@ptrCast(node.data.?));
+    if (max_number_of_callbacks_set == 1) {
+        var node = queue.last.?;
+        while (queue_len > max_number_of_callbacks_set) : (queue_len -= 1) {
+            node = free_callbacks_set(node, "prev");
+        }
+        node.next = null;
+        queue.last = node;
+        queue.len = queue_len;
+    }else{
+        var node = queue.first.?;
+        while (queue_len > max_number_of_callbacks_set) : (queue_len -= 1) {
+            node = free_callbacks_set(node, "next");
+        }
 
-        allocator.free(events_set.events);
-        allocator.destroy(events_set);
+        const callbacks_set: *Loop.CallbacksSet = @alignCast(@ptrCast(node.data.?));
+        node.prev = null;
+        queue.first = node;
+        queue.len = queue_len;
 
-        const next_node = node.next.?;
-        allocator.destroy(node);
-        node = next_node;
+        loop.max_callbacks_sets_per_queue[index] = Loop.get_max_callbacks_sets(
+            loop.ready_tasks_queue_min_bytes_capacity, callbacks_set.callbacks.len
+        );
     }
-
-    const events_set: *Loop.EventsSet = @alignCast(@ptrCast(node.data.?));
-    node.prev = null;
-    queue.first = node;
-    queue.len = queue_len;
-
-    loop.max_events_sets_per_queue[index] = Loop.get_max_events_sets(
-        loop.ready_tasks_queue_min_bytes_capacity, events_set.events.len
-    );
 }
 
 
-inline fn call_once(
-    loop: *Loop, index: usize, max_number_of_events_set: usize,
-    queue: *LinkedList, arena: *std.heap.ArenaAllocator
+fn call_once(
+    loop: *Loop, index: usize, max_number_of_callbacks_set: usize,
+    ready_queue: *Loop.ReadyQueue, arena: *std.heap.ArenaAllocator
 ) CallOnceReturn {
+    const queue = &ready_queue.queue;
+    defer {
+        ready_queue.last_node = queue.first;
+    }
     var _node: ?LinkedList.Node = queue.first orelse return .Stop;
 
     var can_execute: bool = true;
     while (_node) |node| {
         _node = node.next;
-        const events_set: *Loop.EventsSet = @alignCast(@ptrCast(node.data.?));
-        const events_num = events_set.events_num;
-        if (events_num == 0) return .Stop;
+        const callbacks_set: *Loop.CallbacksSet = @alignCast(@ptrCast(node.data.?));
+        const callbacks_num = callbacks_set.callbacks_num;
+        if (callbacks_num == 0) return .Stop;
 
-        for (events_set.events[0..events_num]) |handle| {
-            if (handle.run_callback(can_execute)) {
+        for (callbacks_set.callbacks[0..callbacks_num]) |callback| {
+            if (Loop.run_callback(callback, can_execute)) {
                 can_execute = false;
             }
         }
-        events_set.events_num = 0;
+        callbacks_set.callbacks_num = 0;
     }
 
-    remove_exceded_events(loop, index, queue, max_number_of_events_set);
+    remove_exceded_callbacks(loop, index, queue, max_number_of_callbacks_set);
     _ = arena.reset(.free_all);
 
     if (!can_execute) {
@@ -74,48 +91,47 @@ inline fn call_once(
 
 pub fn run_forever(self: *Loop) !void {
     const mutex = &self.mutex;
-    {
-        mutex.lock();
-        defer mutex.unlock();
+    mutex.lock();
+    defer mutex.unlock();
 
-        if (self.closed) {
-            utils.put_python_runtime_error_message("Loop is closed\x00");
-            return error.PythonError;
-        }
-
-        if (self.stopping) {
-            utils.put_python_runtime_error_message("Loop is stopping\x00");
-            return error.PythonError;
-        }
-
-        if (self.running) {
-            utils.put_python_runtime_error_message("Loop is already running\x00");
-            return error.PythonError;
-        }
-
-        self.running = true;
-        self.stopping = false;
+    if (self.closed) {
+        utils.put_python_runtime_error_message("Loop is closed\x00");
+        return error.PythonError;
     }
 
+    if (self.stopping) {
+        utils.put_python_runtime_error_message("Loop is stopping\x00");
+        return error.PythonError;
+    }
+
+    if (self.running) {
+        utils.put_python_runtime_error_message("Loop is already running\x00");
+        return error.PythonError;
+    }
+
+    self.running = true;
+    self.stopping = false;
+
     defer {
-        mutex.lock();
         self.running = false;
         self.stopping = false;
-        mutex.unlock();
     }
 
     var ready_tasks_queue_index = self.ready_tasks_queue_index;
-    const ready_tasks_queues: []LinkedList = &self.ready_tasks_queues;
+    const ready_tasks_queues: []Loop.ReadyQueue = &self.ready_tasks_queues;
     const temporal_handles_arenas: []std.heap.ArenaAllocator = &self.temporal_handles_arenas;
-    const max_events_set_per_queue: []usize = &self.max_events_sets_per_queue;
+    const max_callbacks_set_per_queue: []usize = &self.max_callbacks_sets_per_queue;
     while (!self.stopping) {
         const old_index = ready_tasks_queue_index;
         ready_tasks_queue_index = 1 - ready_tasks_queue_index;
         self.ready_tasks_queue_index = ready_tasks_queue_index;
 
+        mutex.unlock();
+        defer mutex.lock();
+
         switch (
             call_once(
-                self, old_index, max_events_set_per_queue[old_index], &ready_tasks_queues[old_index],
+                self, old_index, max_callbacks_set_per_queue[old_index], &ready_tasks_queues[old_index],
                 &temporal_handles_arenas[old_index]
             )
         ) {
