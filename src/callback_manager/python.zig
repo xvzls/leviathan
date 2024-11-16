@@ -1,10 +1,12 @@
-const python_c = @import("../../utils/python_c.zig");
+const CallbackManager = @import("main.zig");
+
+const python_c = @import("../utils/python_c.zig");
 const PyObject = *python_c.PyObject;
 
 // const Future = @import("../../future/main.zig");
-const Handle = @import("../../handle.zig");
+const Handle = @import("../handle.zig");
 
-const utils = @import("../../utils/utils.zig");
+const utils = @import("../utils/utils.zig");
 const allocator = utils.allocator;
 
 pub const GenericCallbackData = struct {
@@ -15,15 +17,21 @@ pub const GenericCallbackData = struct {
     cancelled: *bool,
 };
 
+pub const FutureCallbacksSetData = struct {
+    sets_queue: *CallbackManager.CallbacksSetsQueue,
+    future: PyObject,
+};
+
 pub const FutureCallbackData = struct {
     exception_handler: PyObject,
     contextvars: PyObject,
     py_callback: PyObject,
-    py_future: PyObject, // TODO
-    repeat: usize
+    py_future: PyObject,
+    repeat: usize = 1,
+    dec_future: bool = false
 };
 
-inline fn deal_with_result(result: ?PyObject, exception_handler: PyObject) bool {
+inline fn deal_with_result(result: ?PyObject, exception_handler: PyObject) CallbackManager.ExecuteCallbacksReturn {
     if (result) |value| {
         python_c.py_decref(value);
     }else{
@@ -31,19 +39,19 @@ inline fn deal_with_result(result: ?PyObject, exception_handler: PyObject) bool 
             python_c.PyErr_ExceptionMatches(python_c.PyExc_SystemExit) > 0 or
             python_c.PyErr_ExceptionMatches(python_c.PyExc_KeyboardInterrupt) > 0
         ) {
-            return true;
+            return .Exception;
         }
 
         const exception: PyObject = python_c.PyErr_GetRaisedException()
-            orelse return true;
+            orelse return .Exception;
         defer python_c.py_decref(exception);
 
         const exc_handler_ret: PyObject = python_c.PyObject_CallOneArg(exception_handler, exception)
-            orelse return true;
+            orelse return .Exception;
         python_c.py_decref(exc_handler_ret);
     }
 
-    return false;
+    return .Continue;
 }
 
 pub inline fn release_python_generic_callback(data: GenericCallbackData) void {
@@ -54,11 +62,11 @@ pub inline fn release_python_generic_callback(data: GenericCallbackData) void {
     python_c.py_decref(@ptrCast(data.py_handle));
 }
 
-pub inline fn callback_for_python_generic_callbacks(data: GenericCallbackData) bool {
+pub inline fn callback_for_python_generic_callbacks(data: GenericCallbackData) CallbackManager.ExecuteCallbacksReturn {
     defer release_python_generic_callback(data);
 
     if (@atomicLoad(bool, data.cancelled, .monotonic)) {
-        return false;
+        return .Continue;
     }
 
     const ret: ?PyObject = python_c.PyObject_Vectorcall(
@@ -70,17 +78,29 @@ pub inline fn callback_for_python_generic_callbacks(data: GenericCallbackData) b
 pub inline fn release_python_future_callback(data: FutureCallbackData) void {
     python_c.py_decref(data.contextvars);
     python_c.py_decref(data.py_callback);
+    if (data.dec_future) python_c.py_decref(data.py_future);
 }
 
-pub inline fn callback_for_python_future_callbacks(data: FutureCallbackData) bool {
+pub inline fn callback_for_python_future_callbacks(data: FutureCallbackData) CallbackManager.ExecuteCallbacksReturn {
     defer release_python_future_callback(data);
 
     const py_callback = data.py_callback;
     const py_future = data.py_future;
     for (0..data.repeat) |_| {
         const ret: ?PyObject = python_c.PyObject_CallOneArg(py_callback, py_future);
-        if (deal_with_result(ret, data.exception_handler)) return true;
+        switch (deal_with_result(ret, data.exception_handler)) {
+            .Continue => {},
+            .Stop => return .Stop,
+            .Exception => return .Exception
+        }
     }
 
-    return false;
+    return .Continue;
+}
+
+pub inline fn callback_for_python_future_set_callbacks(
+    data: FutureCallbacksSetData, status: CallbackManager.ExecuteCallbacksReturn
+) CallbackManager.ExecuteCallbacksReturn {
+    defer python_c.py_decref(data.future);
+    return CallbackManager.execute_callbacks(data.sets_queue, status, false);
 }

@@ -68,36 +68,6 @@ pub fn future_new(
     return @ptrCast(self);
 }
 
-pub fn future_traverse(self: ?*PythonFutureObject, visit: python_c.visitproc, arg: ?*anyopaque) callconv(.C) c_int {
-    const instance = self.?;
-    const objects = .{
-        instance.asyncio_module,
-        instance.invalid_state_exc,
-        instance.cancelled_error_exc,
-
-        instance.exception_tb,
-        instance.exception,
-        instance.cancel_msg_py_object,
-    };
-    inline for (objects) |object| {
-        if (object) |obj| {
-            const ret = visit.?(obj, arg);
-            if (ret != 0) {
-                return ret;
-            }
-        }
-    }
-
-    if (instance.py_loop) |loop| {
-        const ret = visit.?(@ptrCast(loop), arg);
-        if (ret != 0) {
-            return ret;
-        }
-    }
-
-    return 0;
-}
-
 inline fn future_clear(py_future: *PythonFutureObject) void {
     if (py_future.future_obj) |future_obj| {
         future_obj.release();

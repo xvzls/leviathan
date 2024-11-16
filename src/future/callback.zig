@@ -1,5 +1,6 @@
 const std = @import("std");
 
+const CallbackManager = @import("../callback_manager/main.zig");
 const Future = @import("main.zig");
 
 const BTree = @import("../utils/btree/btree.zig");
@@ -8,10 +9,10 @@ const python_c = @import("../utils/python_c.zig");
 const PyObject = *python_c.PyObject;
 
 
+const MaxCallbacks = 8;
 pub const CallbackType = enum { Python, Zig };
-pub const FutureCallback = Handle.HandleCallback;
 
-pub fn create_python_handle(self: *Future, callback_data: PyObject) !*Handle {
+pub fn create_python_handle(self: *Future, callback_data: PyObject) !*CallbackManager.Callback {
     var py_callback: ?PyObject = null;
     var py_context: ?PyObject = null;
     const ret = python_c.PyArg_ParseTuple(callback_data, "(OO)\x00", &py_callback, &py_context);
@@ -19,28 +20,19 @@ pub fn create_python_handle(self: *Future, callback_data: PyObject) !*Handle {
         return error.PythonError;
     }
 
-    const py_callback_info = python_c.Py_BuildValue("(OO)\x00", py_callback, self.py_future.?)
-        orelse return error.PythonError;
-    errdefer python_c.py_decref(py_callback_info);
-
-    const py_loop = self.loop.?.py_loop.?;
-
-    const args: PyObject = python_c.Py_BuildValue(
-        "(OOOOp)\x00", py_callback_info, py_loop, py_context.?,
-        py_loop.exception_handler.?, @as(c_int, 0)
-    ) orelse return error.PythonError;
-    defer python_c.py_decref(args);
-
-    const py_handle: *Handle.PythonHandleObject = @ptrCast(
-        python_c.PyObject_CallObject(@ptrCast(&Handle.PythonHandleType), args)
-            orelse return error.PythonError
-    );
-
-    return py_handle.handle_obj.?;
+    try CallbackManager.append_new_callback(self.callbacks_arena_allocator, &self.callbacks_queue, .{
+        .PythonFuture = .{
+            .exception_handler = self.loop.?.py_loop.?.exception_handler,
+            .contextvars = python_c.py_newref(py_context.?),
+            .py_callback = python_c.py_newref(py_callback.?),
+            .py_future = self.py_future.?,
+        }
+    }, MaxCallbacks);
 }
 
 pub fn add_done_callback(
-    self: *Future, callback: ?FutureCallback, data: ?*anyopaque, callback_id: u64, callback_type: CallbackType
+    self: *Future, callback: ?CallbackManager.ZigGenericCallback, data: ?*anyopaque,
+    callback_id: u64, callback_type: CallbackType
 ) !void {
     const mutex = &self.mutex;
     mutex.lock();
@@ -48,7 +40,6 @@ pub fn add_done_callback(
 
     if (self.status != .PENDING) return error.FutureAlreadyFinished;
 
-    const callbacks_array = &self.callbacks_array;
     const callbacks_btree = switch (callback_type) {
         .Python => self.python_callbacks,
         .Zig => self.zig_callbacks
@@ -59,29 +50,42 @@ pub fn add_done_callback(
         @ptrCast(callbacks_btree.search(callback_id, &b_node))
     );
     if (existing_handle_node) |node| {
-        const existing_handle: *Handle = @alignCast(@ptrCast(node.data.?));
-        if (existing_handle.cancelled) {
-            existing_handle.repeat = 1;
-            existing_handle.cancelled = false;
-        }else{
-            existing_handle.repeat +|= 1;
+        const existing_handle: *CallbackManager.Callback = @alignCast(@ptrCast(node.data.?));
+        switch (existing_handle) {
+            .ZigGeneric => |handle| {
+                handle.repeat +|= 1;
+            },
+            .PythonFuture => |handle| {
+                handle.repeat +|= 1;
+            },
+            else => unreachable
         }
     }else{
         const allocator = self.callbacks_arena_allocator;
         const handle = switch (callback_type) {
             .Python => try self.create_python_handle(@alignCast(@ptrCast(data.?))),
-            .Zig => try Handle.init(allocator, null, self.loop.?, callback.?, self)
+            .Zig => {
+                try CallbackManager.append_new_callback(allocator, &self.callbacks_queue, .{
+                    .ZigGeneric = .{
+                        .callback = callback.?,
+                        .data = data,
+                    }
+                }, MaxCallbacks);
+            }
         };
         errdefer {
-            switch (callback_type) {
-                .Python => python_c.py_decref(@ptrCast(handle.py_handle.?)),
-                .Zig => allocator.destroy(handle)
+            switch (handle) {
+                .PythonFuture => |d| {
+                    d.repeat = 0;
+                },
+                .ZigGeneric => |d| {
+                    d.repeat = 0;
+                },
+                else => unreachable
             }
         }
 
-        const callback_node = try callbacks_array.create_new_node(handle);
-        BTree.insert_in_node(callbacks_btree.allocator, b_node, callback_id, callback_node);
-        callbacks_array.append_node(callback_node);
+        BTree.insert_in_node(callbacks_btree.allocator, b_node, callback_id, handle);
     }
 }
 
@@ -97,51 +101,34 @@ pub fn remove_done_callback(self: *Future, callback_id: u64, callback_type: Call
         .Zig => self.zig_callbacks
     };
 
-    const callback_node: LinkedList.Node = @alignCast(
+    const handle: *CallbackManager.Callback = @alignCast(
         @ptrCast(callbacks_btree.search(callback_id, null) orelse return error.CallbackNotFound)
     );
-    const handle: *Handle = @alignCast(@ptrCast(callback_node.data.?));
-    if (handle.cancelled) {
-        return 0;
-    }
 
-    const removed_count = handle.repeat;
-    handle.cancelled = true;
-
-    return removed_count;
+    return switch (handle) {
+        .ZigGeneric => |d| blk: {
+            const repeat = d.repeat;
+            d.repeat = 0;
+            break :blk repeat;
+        },
+        .PythonFuture => |d| blk: {
+            const repeat = d.repeat;
+            d.repeat = 0;
+            break :blk repeat;
+        },
+        else => unreachable
+    };
 }
 
-fn release_future_callback(_: *Handle, data: ?*anyopaque) bool {
-    const future: *Future = @alignCast(@ptrCast(data.?));
-    if (future.py_future) |py_future| {
-        python_c.py_decref(py_future);
-    }else{
-        future.release();
-    }
-    return false;
-}
-
-pub inline fn call_done_callbacks(self: *Future, release: bool) !void {
+pub inline fn call_done_callbacks(self: *Future) !void {
     if (self.status != .PENDING) return error.FutureAlreadyFinished;
 
-    const loop = self.loop.?;
-    const loop_mutex = &loop.mutex;
-    loop_mutex.lock();
-    defer loop_mutex.unlock();
-
-    loop.extend_ready_tasks(&self.callbacks_array);
-
-    if (release) {
-        loop.call_soon_without_handle(&release_future_callback, self);
-    }
+    try self.loop.?.call_soon_threadsafe(.{
+        .PythonFutureCallbacksSet = .{
+            .sets_queue = &self.callbacks_queue,
+            .future = @ptrCast(python_c.py_newref(self.py_future.?))
+        }
+    });
 
     self.status = .FINISHED;
-}
-
-pub inline fn call_done_callbacks_thread_safe(self: *Future, release: bool) !void {
-    const mutex = &self.mutex;
-    mutex.lock();
-    defer mutex.unlock();
-
-    try self.call_done_callbacks(release);
 }

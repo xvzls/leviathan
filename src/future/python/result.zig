@@ -65,7 +65,7 @@ pub fn future_exception(self: ?*PythonFutureObject, _: ?PyObject) callconv(.C) ?
         },
         .FINISHED => blk: {
             if (instance.exception) |exc| {
-                break :blk python_c.Py_NewRef(exc);
+                break :blk python_c.py_newref(exc);
             }
             break :blk null;
         },
@@ -96,8 +96,15 @@ pub fn future_set_exception(self: ?*PythonFutureObject, args: ?PyObject) callcon
         return null;
     }
 
-    instance.exception = python_c.Py_NewRef(exception.?) orelse return null;
-    obj.call_done_callbacks(false) catch unreachable;
+    instance.exception = python_c.py_newref(exception.?);
+    errdefer python_c.py_decref(exception.?);
+
+    obj.call_done_callbacks() catch |err| {
+        const err_trace = @errorReturnTrace();
+        utils.print_error_traces(err_trace, err);
+        utils.put_python_runtime_error_message(@errorName(err));
+        return null;
+    };
 
     return python_c.get_py_none();
 }
@@ -117,13 +124,20 @@ pub fn future_set_result(self: ?*PythonFutureObject, args: ?PyObject) callconv(.
         else => {}
     }
 
-    var result: PyObject = undefined;
+    var result: ?PyObject = undefined;
     if (python_c.PyArg_ParseTuple(args.?, "O:result\x00", &result) < 0) {
         return null;
     }
 
-    obj.result = python_c.Py_NewRef(result) orelse return null;
-    obj.call_done_callbacks(false) catch unreachable;
+    obj.result = python_c.py_newref(result.?);
+    errdefer python_c.py_decref(result.?);
+
+    obj.call_done_callbacks() catch |err| {
+        const err_trace = @errorReturnTrace();
+        utils.print_error_traces(err_trace, err);
+        utils.put_python_runtime_error_message(@errorName(err));
+        return null;
+    };
 
     return python_c.get_py_none();
 }

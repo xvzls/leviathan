@@ -110,7 +110,7 @@ inline fn z_loop_init(
         return error.PythonError;
     }
 
-    self.exception_handler = python_c.Py_NewRef(exception_handler.?) orelse return error.PythonError;
+    self.exception_handler = python_c.py_newref(exception_handler.?) orelse return error.PythonError;
     errdefer python_c.py_decref(exception_handler.?);
 
     self.loop_obj = try Loop.init(allocator, @intCast(ready_tasks_queue_min_bytes_capacity));

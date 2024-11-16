@@ -4,12 +4,12 @@ const builtin = @import("builtin");
 const python_c = @import("utils/python_c.zig");
 const utils = @import("utils/utils.zig");
 
-// const future = @import("future/main.zig");
+const future = @import("future/main.zig");
 const loop = @import("loop/main.zig");
 const handle = @import("handle.zig");
 
 const leviathan_types = .{
-    // &future.PythonFutureType,
+    &future.PythonFutureType,
     &loop.PythonLoopType,
     &handle.PythonHandleType
 };
@@ -43,7 +43,7 @@ inline fn initialize_python_module() !*python_c.PyObject {
     errdefer python_c.py_decref(module);
 
     const leviathan_modules_name = .{
-        // "Future\x00",
+        "Future\x00",
         "Loop\x00",
         "Handle\x00"
     };

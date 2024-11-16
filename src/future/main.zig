@@ -2,7 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 
 const Loop = @import("../loop/main.zig");
-const NoOpMutex = @import("../utils/no_op_mutex.zig");
+const CallbackManager = @import("../callback_manager/main.zig");
 
 const LinkedList = @import("../utils/linked_list.zig");
 const BTree = @import("../utils/btree/btree.zig");
@@ -20,9 +20,9 @@ mutex: std.Thread.Mutex,
 
 callbacks_arena: std.heap.ArenaAllocator,
 callbacks_arena_allocator: std.mem.Allocator = undefined,
-zig_callbacks: *BTree = undefined,
+callbacks_queue: CallbackManager.CallbacksSetsQueue = undefined,
 python_callbacks: *BTree = undefined,
-callbacks_array: LinkedList = undefined,
+zig_callbacks: *BTree = undefined,
 loop: ?*Loop,
 
 py_future: ?*Future.constructors.PythonFutureObject = null,
@@ -48,12 +48,19 @@ pub fn init(allocator: std.mem.Allocator, loop: *Loop) !*Future {
     fut.python_callbacks = try BTree.init(fut.callbacks_arena_allocator);
     errdefer fut.python_callbacks.release() catch unreachable;
 
-    fut.callbacks_array = LinkedList.init(fut.callbacks_arena_allocator);
+    fut.callbacks_queue = .{
+        .queue = LinkedList.init(fut.callbacks_arena_allocator),
+        .last_set = null
+    };
 
     return fut;
 }
 
 pub inline fn release(self: *Future) void {
+    if (self.status == .PENDING) {
+        _ = CallbackManager.execute_callbacks(&self.callbacks_queue, .Stop, false);
+    }
+
     self.callbacks_arena.deinit();
     const allocator = self.allocator;
 
