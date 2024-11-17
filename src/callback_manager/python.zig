@@ -1,3 +1,5 @@
+const std = @import("std");
+
 const CallbackManager = @import("main.zig");
 
 const python_c = @import("../utils/python_c.zig");
@@ -7,7 +9,6 @@ const PyObject = *python_c.PyObject;
 const Handle = @import("../handle.zig");
 
 const utils = @import("../utils/utils.zig");
-const allocator = utils.allocator;
 
 pub const GenericCallbackData = struct {
     args: []PyObject,
@@ -54,7 +55,7 @@ inline fn deal_with_result(result: ?PyObject, exception_handler: PyObject) Callb
     return .Continue;
 }
 
-pub inline fn release_python_generic_callback(data: GenericCallbackData) void {
+pub inline fn release_python_generic_callback(allocator: std.mem.Allocator, data: GenericCallbackData) void {
     for (data.args) |arg| python_c.py_decref(arg);
     allocator.free(data.args);
 
@@ -62,8 +63,10 @@ pub inline fn release_python_generic_callback(data: GenericCallbackData) void {
     python_c.py_decref(@ptrCast(data.py_handle));
 }
 
-pub inline fn callback_for_python_generic_callbacks(data: GenericCallbackData) CallbackManager.ExecuteCallbacksReturn {
-    defer release_python_generic_callback(data);
+pub inline fn callback_for_python_generic_callbacks(
+    allocator: std.mem.Allocator, data: GenericCallbackData
+) CallbackManager.ExecuteCallbacksReturn {
+    defer release_python_generic_callback(allocator, data);
 
     if (@atomicLoad(bool, data.cancelled, .monotonic)) {
         return .Continue;
@@ -99,8 +102,8 @@ pub inline fn callback_for_python_future_callbacks(data: FutureCallbackData) Cal
 }
 
 pub inline fn callback_for_python_future_set_callbacks(
-    data: FutureCallbacksSetData, status: CallbackManager.ExecuteCallbacksReturn
+    allocator: std.mem.Allocator, data: FutureCallbacksSetData, status: CallbackManager.ExecuteCallbacksReturn
 ) CallbackManager.ExecuteCallbacksReturn {
     defer python_c.py_decref(data.future);
-    return CallbackManager.execute_callbacks(data.sets_queue, status, false);
+    return CallbackManager.execute_callbacks(allocator, data.sets_queue, status, false);
 }

@@ -4,13 +4,12 @@ const Loop = @import("main.zig");
 const CallbackManager = @import("../callback_manager/main.zig");
 
 const utils = @import("../utils/utils.zig");
-const allocator = utils.allocator;
 const python_c = @import("../utils/python_c.zig");
 const PyObject = *python_c.PyObject;
 
 const std = @import("std");
 
-inline fn free_callbacks_set(node: LinkedList.Node, comptime field_name: []const u8) LinkedList.Node {
+inline fn free_callbacks_set(allocator: std.mem.Allocator, node: LinkedList.Node, comptime field_name: []const u8) LinkedList.Node {
     const callbacks_set: *CallbackManager.CallbacksSet = @alignCast(@ptrCast(node.data.?));
     allocator.free(callbacks_set.callbacks);
     allocator.destroy(callbacks_set);
@@ -29,10 +28,11 @@ inline fn remove_exceded_callbacks(
     var queue_len = queue.len;
     if (queue_len <= max_number_of_callbacks_set) return;
 
+    const allocator = loop.allocator;
     if (max_number_of_callbacks_set == 1) {
         var node = queue.last.?;
         while (queue_len > max_number_of_callbacks_set) : (queue_len -= 1) {
-            node = free_callbacks_set(node, "prev");
+            node = free_callbacks_set(allocator, node, "prev");
         }
         node.next = null;
         queue.last = node;
@@ -40,7 +40,7 @@ inline fn remove_exceded_callbacks(
     }else{
         var node = queue.first.?;
         while (queue_len > max_number_of_callbacks_set) : (queue_len -= 1) {
-            node = free_callbacks_set(node, "next");
+            node = free_callbacks_set(allocator, node, "next");
         }
 
         const callbacks_set: *CallbackManager.CallbacksSet = @alignCast(@ptrCast(node.data.?));
@@ -59,7 +59,7 @@ fn call_once(
     loop: *Loop, index: usize, max_number_of_callbacks_set: usize,
     ready_queue: *CallbackManager.CallbacksSetsQueue
 ) CallbackManager.ExecuteCallbacksReturn {
-    const ret = CallbackManager.execute_callbacks(ready_queue, .Continue, true);
+    const ret = CallbackManager.execute_callbacks(loop.allocator, ready_queue, .Continue, true);
     remove_exceded_callbacks(loop, index, ready_queue, max_number_of_callbacks_set);
 
     return ret;

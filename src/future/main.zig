@@ -58,7 +58,7 @@ pub fn init(allocator: std.mem.Allocator, loop: *Loop) !*Future {
 
 pub inline fn release(self: *Future) void {
     if (self.status == .PENDING) {
-        _ = CallbackManager.execute_callbacks(&self.callbacks_queue, .Stop, false);
+        _ = CallbackManager.execute_callbacks(self.allocator, &self.callbacks_queue, .Stop, false);
     }
 
     self.callbacks_arena.deinit();

@@ -2,7 +2,6 @@ const python_c = @import("../../utils/python_c.zig");
 const PyObject = *python_c.PyObject;
 
 const utils = @import("../../utils/utils.zig");
-const allocator = utils.allocator;
 
 const Loop = @import("../main.zig");
 
@@ -71,7 +70,7 @@ inline fn loop_clear(py_loop: *PythonLoopObject) void {
             @panic("Loop is running, can't be deallocated");
         }
 
-        allocator.destroy(loop);
+        loop.allocator.destroy(loop);
     }
 
     python_c.py_xdecref(py_loop.exception_handler);
@@ -110,9 +109,10 @@ inline fn z_loop_init(
         return error.PythonError;
     }
 
-    self.exception_handler = python_c.py_newref(exception_handler.?) orelse return error.PythonError;
+    self.exception_handler = python_c.py_newref(exception_handler.?);
     errdefer python_c.py_decref(exception_handler.?);
 
+    const allocator = utils.gpa.allocator();
     self.loop_obj = try Loop.init(allocator, @intCast(ready_tasks_queue_min_bytes_capacity));
     self.loop_obj.?.py_loop = self;
     return 0;

@@ -2,7 +2,6 @@ const python_c = @import("../../utils/python_c.zig");
 const PyObject = *python_c.PyObject;
 
 const utils = @import("../../utils/utils.zig");
-const allocator = utils.allocator;
 
 const Loop = @import("../main.zig");
 const Handle = @import("../../handle.zig");
@@ -40,7 +39,7 @@ inline fn get_py_context(knames: ?PyObject, args: []?PyObject, loop: *PythonLoop
     }
 }
 
-inline fn get_callback_info(args: []?PyObject) ![]PyObject {
+inline fn get_callback_info(allocator: std.mem.Allocator, args: []?PyObject) ![]PyObject {
     const callback_info = try allocator.alloc(PyObject, args.len);
     errdefer allocator.free(callback_info);
 
@@ -68,7 +67,8 @@ inline fn z_loop_call_soon(
     const context = try get_py_context(knames, args, self);
     errdefer python_c.py_decref(context);
 
-    const callback_info = try get_callback_info(args);
+    const allocator = self.loop_obj.?.allocator;
+    const callback_info = try get_callback_info(allocator, args);
     errdefer {
         for (callback_info) |arg| {
             python_c.py_decref(@ptrCast(arg));

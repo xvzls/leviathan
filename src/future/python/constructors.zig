@@ -2,7 +2,6 @@ const python_c = @import("../../utils/python_c.zig");
 const PyObject = *python_c.PyObject;
 
 const utils = @import("../../utils/utils.zig");
-const allocator = utils.allocator;
 
 const Future = @import("../main.zig");
 const Loop = @import("../../loop/main.zig");
@@ -109,7 +108,7 @@ inline fn z_future_init(
         return error.PythonError;
     }
 
-    self.future_obj = try Future.init(allocator, leviathan_loop.loop_obj.?);
+    self.future_obj = try Future.init(leviathan_loop.loop_obj.?.allocator, leviathan_loop.loop_obj.?);
     self.future_obj.?.py_future = self;
     self.py_loop = python_c.py_newref(leviathan_loop);
 

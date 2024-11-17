@@ -97,14 +97,16 @@ pub inline fn append_new_callback(
     return &callbacks.callbacks[0];
 }
 
-pub inline fn run_callback(callback: Callback, status: ExecuteCallbacksReturn) ExecuteCallbacksReturn {
+pub inline fn run_callback(
+    allocator: std.mem.Allocator, callback: Callback, status: ExecuteCallbacksReturn
+) ExecuteCallbacksReturn {
     switch (status) {
         .Continue => {
             return switch (callback) {
                 .ZigGeneric => |data| data.callback(data.data, status),
-                .PythonGeneric => |data| PythonCallbacks.callback_for_python_generic_callbacks(data),
+                .PythonGeneric => |data| PythonCallbacks.callback_for_python_generic_callbacks(allocator, data),
                 .PythonFutureCallbacksSet => |data| PythonCallbacks.callback_for_python_future_set_callbacks(
-                    data, status
+                    allocator, data, status
                 ),
                 .PythonFuture => |data| PythonCallbacks.callback_for_python_future_callbacks(data),
             };
@@ -114,10 +116,10 @@ pub inline fn run_callback(callback: Callback, status: ExecuteCallbacksReturn) E
                 .ZigGeneric => |data| {
                     _ = data.callback(data.data, status);
                 },
-                .PythonGeneric => |data| PythonCallbacks.release_python_generic_callback(data),
+                .PythonGeneric => |data| PythonCallbacks.release_python_generic_callback(allocator, data),
                 .PythonFutureCallbacksSet => |data| {
                     _ = PythonCallbacks.callback_for_python_future_set_callbacks(
-                        data, status
+                        allocator, data, status
                     );
                 },
                 .PythonFuture => |data| PythonCallbacks.release_python_future_callback(data),
@@ -128,7 +130,7 @@ pub inline fn run_callback(callback: Callback, status: ExecuteCallbacksReturn) E
 }
 
 pub fn execute_callbacks(
-    sets_queue: *CallbacksSetsQueue, _exec_status: ExecuteCallbacksReturn,
+    allocator: std.mem.Allocator, sets_queue: *CallbacksSetsQueue, _exec_status: ExecuteCallbacksReturn,
     comptime can_restart: bool
 ) ExecuteCallbacksReturn {
     const queue = &sets_queue.queue;
@@ -153,7 +155,7 @@ pub fn execute_callbacks(
         }
 
         for (callbacks_set.callbacks[0..callbacks_num]) |callback| {
-            switch (run_callback(callback, status)) {
+            switch (run_callback(allocator, callback, status)) {
                 .Continue => {},
                 .Stop => {
                     status = .Stop;

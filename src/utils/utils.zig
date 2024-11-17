@@ -13,8 +13,6 @@ pub var gpa = blk: {
     }
 };
 
-pub const allocator: std.mem.Allocator = gpa.allocator();
-
 pub inline fn put_python_runtime_error_message(msg: [:0]const u8) void {
     python_c.PyErr_SetString(
         python_c.PyExc_RuntimeError, @ptrCast(msg)
@@ -41,6 +39,7 @@ pub inline fn print_error_traces(
         return;
     }
 
+    const allocator = gpa.allocator();
     var debug_info = std.debug.openSelfDebugInfo(allocator) catch {
         writer.print("No zig's traces available", .{}) catch unreachable;
         return;

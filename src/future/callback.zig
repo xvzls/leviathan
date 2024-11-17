@@ -12,7 +12,7 @@ const PyObject = *python_c.PyObject;
 const MaxCallbacks = 8;
 pub const CallbackType = enum { Python, Zig };
 
-pub fn create_python_handle(self: *Future, callback_data: PyObject) !*CallbackManager.Callback {
+pub fn create_python_handle(self: *Future, callback_data: PyObject) !CallbackManager.Callback {
     var py_callback: ?PyObject = null;
     var py_context: ?PyObject = null;
     const ret = python_c.PyArg_ParseTuple(callback_data, "(OO)\x00", &py_callback, &py_context);
@@ -20,14 +20,14 @@ pub fn create_python_handle(self: *Future, callback_data: PyObject) !*CallbackMa
         return error.PythonError;
     }
 
-    try CallbackManager.append_new_callback(self.callbacks_arena_allocator, &self.callbacks_queue, .{
+    return .{
         .PythonFuture = .{
-            .exception_handler = self.loop.?.py_loop.?.exception_handler,
+            .exception_handler = self.loop.?.py_loop.?.exception_handler.?,
             .contextvars = python_c.py_newref(py_context.?),
             .py_callback = python_c.py_newref(py_callback.?),
-            .py_future = self.py_future.?,
+            .py_future = @ptrCast(self.py_future.?),
         }
-    }, MaxCallbacks);
+    };
 }
 
 pub fn add_done_callback(
@@ -51,39 +51,36 @@ pub fn add_done_callback(
     );
     if (existing_handle_node) |node| {
         const existing_handle: *CallbackManager.Callback = @alignCast(@ptrCast(node.data.?));
-        switch (existing_handle) {
-            .ZigGeneric => |handle| {
-                handle.repeat +|= 1;
+        switch (@as(CallbackManager.CallbackType, existing_handle.*)) {
+            .ZigGeneric => {
+                existing_handle.ZigGeneric.repeat +|= 1;
             },
-            .PythonFuture => |handle| {
-                handle.repeat +|= 1;
+            .PythonFuture => {
+                existing_handle.PythonFuture.repeat +|= 1;
             },
             else => unreachable
         }
     }else{
         const allocator = self.callbacks_arena_allocator;
-        const handle = switch (callback_type) {
-            .Python => try self.create_python_handle(@alignCast(@ptrCast(data.?))),
-            .Zig => {
-                try CallbackManager.append_new_callback(allocator, &self.callbacks_queue, .{
-                    .ZigGeneric = .{
-                        .callback = callback.?,
-                        .data = data,
-                    }
-                }, MaxCallbacks);
-            }
+        const handle: *CallbackManager.Callback = switch (callback_type) {
+            .Python => blk: {
+                const _callback = try create_python_handle(self, @alignCast(@ptrCast(data.?)));
+                errdefer {
+                    python_c.py_decref(_callback.PythonFuture.py_callback);
+                    python_c.py_decref(_callback.PythonFuture.contextvars);
+                }
+
+                break :blk try CallbackManager.append_new_callback(
+                           allocator, &self.callbacks_queue, _callback, MaxCallbacks
+                       );
+            },
+            .Zig => try CallbackManager.append_new_callback(allocator, &self.callbacks_queue, .{
+                .ZigGeneric = .{
+                    .callback = callback.?,
+                    .data = data,
+                }
+            }, MaxCallbacks)
         };
-        errdefer {
-            switch (handle) {
-                .PythonFuture => |d| {
-                    d.repeat = 0;
-                },
-                .ZigGeneric => |d| {
-                    d.repeat = 0;
-                },
-                else => unreachable
-            }
-        }
 
         BTree.insert_in_node(callbacks_btree.allocator, b_node, callback_id, handle);
     }
@@ -105,28 +102,30 @@ pub fn remove_done_callback(self: *Future, callback_id: u64, callback_type: Call
         @ptrCast(callbacks_btree.search(callback_id, null) orelse return error.CallbackNotFound)
     );
 
-    return switch (handle) {
-        .ZigGeneric => |d| blk: {
-            const repeat = d.repeat;
-            d.repeat = 0;
+    return switch (callback_type) {
+        .Zig => blk: {
+            const repeat = handle.ZigGeneric.repeat;
+            handle.ZigGeneric.repeat = 0;
             break :blk repeat;
         },
-        .PythonFuture => |d| blk: {
-            const repeat = d.repeat;
-            d.repeat = 0;
+        .Python => blk: {
+            const repeat = handle.PythonFuture.repeat;
+            handle.PythonFuture.repeat = 0;
             break :blk repeat;
-        },
-        else => unreachable
+        }
     };
 }
 
 pub inline fn call_done_callbacks(self: *Future) !void {
     if (self.status != .PENDING) return error.FutureAlreadyFinished;
 
+    const pyfut: PyObject = @ptrCast(python_c.py_newref(self.py_future.?));
+    errdefer python_c.py_decref(pyfut);
+
     try self.loop.?.call_soon_threadsafe(.{
         .PythonFutureCallbacksSet = .{
             .sets_queue = &self.callbacks_queue,
-            .future = @ptrCast(python_c.py_newref(self.py_future.?))
+            .future = pyfut
         }
     });
 
