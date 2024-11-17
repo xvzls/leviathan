@@ -5,7 +5,7 @@ const Future = @import("main.zig");
 
 const BTree = @import("../utils/btree/btree.zig");
 const LinkedList = @import("../utils/linked_list.zig");
-const python_c = @import("../utils/python_c.zig");
+const python_c = @import("python_c");
 const PyObject = *python_c.PyObject;
 
 

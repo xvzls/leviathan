@@ -1,4 +1,4 @@
-const python_c = @import("../../utils/python_c.zig");
+const python_c = @import("python_c");
 pub const constructors = @import("constructors.zig");
 
 const control = @import("control.zig");

@@ -1,4 +1,4 @@
-const python_c = @import("../utils/python_c.zig");
+const python_c = @import("python_c");
 
 pub const LoopEvent = struct {
     callback

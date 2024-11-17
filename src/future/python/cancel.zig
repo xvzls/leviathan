@@ -1,5 +1,6 @@
 const std = @import("std");
-const python_c = @import("../../utils/python_c.zig");
+
+const python_c = @import("python_c");
 const PyObject = *python_c.PyObject;
 
 const constructors = @import("constructors.zig");

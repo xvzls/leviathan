@@ -2,7 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 
 const CallbackManager = @import("../callback_manager/main.zig");
-const python_c = @import("../utils/python_c.zig");
+const python_c = @import("python_c");
 
 const LinkedList = @import("../utils/linked_list.zig");
 const BTree = @import("../utils/btree/btree.zig");

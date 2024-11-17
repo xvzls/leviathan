@@ -1,5 +1,6 @@
 pub const btree = @import("utils/btree.zig");
 pub const linked_list = @import("utils/linked_list.zig");
+pub const callback_manager = @import("callback_manager/main.zig");
 
 test {
     const std = @import("std");

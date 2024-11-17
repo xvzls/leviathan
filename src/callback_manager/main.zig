@@ -53,7 +53,7 @@ pub inline fn create_new_set(allocator: std.mem.Allocator, size: usize) !*Callba
     const callbacks = try allocator.create(CallbacksSet);
     errdefer allocator.destroy(callbacks);
 
-    callbacks.callbacks = try allocator.alloc(Callback, size); //last_callbacks_set_len * 2);
+    callbacks.callbacks = try allocator.alloc(Callback, size);
     callbacks.callbacks_num = 0;
     return callbacks;
 }
@@ -81,11 +81,11 @@ pub inline fn append_new_callback(
             sets_queue.last_set = n;
             return &callbacks.callbacks[callbacks_num];
         }
-        last_callbacks_set_len = callbacks_num;
+        last_callbacks_set_len = (callbacks_num * 2);
         node = n.next;
     }
 
-    callbacks = try create_new_set(allocator, last_callbacks_set_len * 2);
+    callbacks = try create_new_set(allocator, last_callbacks_set_len);
     errdefer allocator.free(callbacks.callbacks);
 
     callbacks.callbacks_num = 1;

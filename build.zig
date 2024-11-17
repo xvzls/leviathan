@@ -1,8 +1,5 @@
 const std = @import("std");
 
-// Although this function looks imperative, note that its job is to
-// declaratively construct a build graph that will be executed by an external
-// runner.
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -13,11 +10,24 @@ pub fn build(b: *std.Build) void {
     });
     const jdz_allocator_module = jdz_allocator.module("jdz_allocator");
 
+    const python_c_module = b.addModule("python_c", .{
+        .root_source_file = b.path("src/python_c.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true
+    });
+    python_c_module.addIncludePath(.{
+        .cwd_relative = "/usr/include/"
+    });
+    python_c_module.linkSystemLibrary("python3.12", .{});
+
     const leviathan_module = b.addModule("leviathan", .{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize
     });
+    leviathan_module.addImport("python_c", python_c_module);
+    leviathan_module.addImport("jdz_allocator", jdz_allocator_module);
 
     const python_lib = b.addSharedLibrary(.{
         .name = "leviathan",
@@ -25,12 +35,6 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .root_source_file = b.path("src/lib.zig")
     });
-    python_lib.addIncludePath(.{
-        .cwd_relative = "/usr/include/"
-    });
-    python_lib.linkSystemLibrary("python3.12");
-    python_lib.linkLibC();
-    python_lib.root_module.addImport("jdz_allocator", jdz_allocator_module);
 
     const python_lib_single_thread = b.addSharedLibrary(.{
         .name = "leviathan_single_thread",
@@ -39,17 +43,19 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/lib.zig"),
         .single_threaded = true
     });
-    python_lib_single_thread.addIncludePath(.{
-        .cwd_relative = "/usr/include/"
-    });
-    python_lib_single_thread.linkSystemLibrary("python3.12");
-    python_lib_single_thread.linkLibC();
-    python_lib_single_thread.root_module.addImport("jdz_allocator", jdz_allocator_module);
 
-    const compile_python_lib = b.addInstallArtifact(python_lib, .{});
-    const compile_single_thread_python_lib = b.addInstallArtifact(python_lib_single_thread, .{});
-    b.getInstallStep().dependOn(&compile_python_lib.step);
-    b.getInstallStep().dependOn(&compile_single_thread_python_lib.step);
+    const python_libs = .{
+        python_lib_single_thread, python_lib
+    };
+    inline for (&python_libs) |lib| {
+        lib.linkLibC();
+        lib.root_module.addImport("leviathan", leviathan_module);
+        lib.root_module.addImport("python_c", python_c_module);
+        lib.root_module.addImport("jdz_allocator", jdz_allocator_module);
+
+        const compile_python_lib = b.addInstallArtifact(lib, .{});
+        b.getInstallStep().dependOn(&compile_python_lib.step);
+    }
 
     const lib_unit_tests = b.addTest(.{
         .root_source_file = b.path("tests/main.zig"),

@@ -1,7 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-const python_c = @import("python_c.zig");
+const python_c = @import("python_c");
 const jdz_allocator = @import("jdz_allocator");
 
 

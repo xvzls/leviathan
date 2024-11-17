@@ -1,4 +1,4 @@
-const python_c = @import("utils/python_c.zig");
+const python_c = @import("python_c");
 const PyObject = *python_c.PyObject;
 
 const utils = @import("utils/utils.zig");
@@ -119,7 +119,7 @@ pub var PythonHandleType = python_c.PyTypeObject{
     .tp_doc = "Leviathan's handle class\x00",
     .tp_basicsize = @sizeOf(PythonHandleObject),
     .tp_itemsize = 0,
-    .tp_flags = python_c.Py_TPFLAGS_DEFAULT | python_c.Py_TPFLAGS_BASETYPE,// | python_c.Py_TPFLAGS_HAVE_GC,
+    .tp_flags = python_c.Py_TPFLAGS_DEFAULT | python_c.Py_TPFLAGS_BASETYPE,
     .tp_new = &python_c.PyType_GenericNew,
     .tp_init = @ptrCast(&handle_init),
     .tp_dealloc = @ptrCast(&handle_dealloc),

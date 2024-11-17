@@ -2,7 +2,7 @@ const std = @import("std");
 
 const CallbackManager = @import("main.zig");
 
-const python_c = @import("../utils/python_c.zig");
+const python_c = @import("python_c");
 const PyObject = *python_c.PyObject;
 
 // const Future = @import("../../future/main.zig");

@@ -4,7 +4,7 @@ const Loop = @import("main.zig");
 const CallbackManager = @import("../callback_manager/main.zig");
 
 const utils = @import("../utils/utils.zig");
-const python_c = @import("../utils/python_c.zig");
+const python_c = @import("python_c");
 const PyObject = *python_c.PyObject;
 
 const std = @import("std");
