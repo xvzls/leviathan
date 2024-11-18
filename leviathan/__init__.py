@@ -1,2 +1,2 @@
-from .future import Future
-from .loop import Loop
+from .future import Future, ThreadSafeFuture
+from .loop import Loop, ThreadSafeLoop

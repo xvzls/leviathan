@@ -7,30 +7,29 @@ import asyncio
 T = TypeVar('T')
 
 
-class Future(asyncio.Future[T]):
+class Future(_FutureSingleThread):
+	_thread_safe = False
+
 	def __init__(self, *, loop: asyncio.AbstractEventLoop | None = None) -> None:
 		if loop is None:
 			loop = asyncio.get_running_loop()
 
-		leviathan_loop = getattr(loop, "_loop_leviathan_class", None)
-		if leviathan_loop is None:
+		thread_safe = getattr(loop, "_thread_safe")
+		if thread_safe != False:
 			raise ValueError("The given loop is not a leviathan event loop")
+
+		_FutureSingleThread.__init__(self, loop)
+
+
+class ThreadSafeFuture(_Future):
+	_thread_safe = True
+
+	def __init__(self, *, loop: asyncio.AbstractEventLoop | None = None) -> None:
+		if loop is None:
+			loop = asyncio.get_running_loop()
 
 		thread_safe = getattr(loop, "_thread_safe")
-		if thread_safe is None:
+		if thread_safe != True:
 			raise ValueError("The given loop is not a leviathan event loop")
 
-		if thread_safe:
-			future_leviathan_class = _Future(leviathan_loop)
-		else:
-			future_leviathan_class = _FutureSingleThread(leviathan_loop)
-	
-		self._future_leviathan_class = future_leviathan_class
-		for x in dir(future_leviathan_class):
-			if x.startswith("_"):
-				continue
-			obj = getattr(future_leviathan_class, x)
-			if callable(obj):
-				setattr(self, x, obj)
-
-		self._thread_safe = thread_safe
+		_Future.__init__(self, loop)
