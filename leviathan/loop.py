@@ -1,12 +1,12 @@
 from .leviathan_zig_single_thread import Loop as _LoopSingleThread
 from .leviathan_zig import Loop as _Loop
 
-from typing import Any
+from typing import Any, Callable
 
 
 class _LoopHelpers:
 	def __init__(self) -> None:
-		self._exception_handler = self.default_exception_handler
+		self._exception_handler: Callable[[dict[str, Any]], None] = self.default_exception_handler
 
 	def _call_exception_handler(self, exc: Exception) -> None:
 		context = {

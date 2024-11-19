@@ -66,7 +66,13 @@ pub fn init(allocator: std.mem.Allocator, rtq_min_capacity: usize) !*Loop {
 }
 
 pub fn release(self: *Loop) void {
-    if (self.closed) @panic("Loop is already closed");
+    if (!self.closed) {
+        @panic("Loop is not closed, can't be deallocated");
+    }
+
+    if (self.running) {
+        @panic("Loop is running, can't be deallocated");
+    }
 
     const allocator = self.allocator;
     for (&self.ready_tasks_queues) |*ready_tasks_queue| {
@@ -81,7 +87,8 @@ pub fn release(self: *Loop) void {
     const delayed_tasks_btree = self.delayed_tasks.btree;
     while (delayed_tasks_btree.pop(null) != null) {}
     delayed_tasks_btree.release() catch unreachable;
-    self.closed = true;
+
+    allocator.destroy(self);
 }
 
 pub usingnamespace @import("control.zig");

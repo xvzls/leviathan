@@ -58,4 +58,17 @@ pub inline fn py_newref(op: anytype) @TypeOf(op) {
     return op;
 }
 
+pub inline fn py_visit(objects: []const ?*Python.PyObject, visit: Python.visitproc, arg: ?*anyopaque) c_int {
+    for (objects) |obj| {
+        if (obj) |_obj| {
+            const vret = visit.?(_obj, arg);
+            if (vret != 0) {
+                return vret;
+            }
+        }
+    }
+
+    return 0;
+}
+
 const Python = @This();

@@ -9,17 +9,11 @@ pub const LEVIATHAN_LOOP_MAGIC = 0x4C4F4F5000000001;
 
 pub const PythonLoopObject = extern struct {
     ob_base: python_c.PyObject,
-    magic: u64,
     loop_obj: ?*Loop,
 
     contextvars_module: ?PyObject,
     contextvars_copy: ?PyObject,
-
-    running: bool,
-    stopping: bool,
-    closed: bool,
-
-    exception_handler: ?PyObject
+    exception_handler: ?PyObject,
 };
 
 inline fn z_loop_new(
@@ -29,7 +23,6 @@ inline fn z_loop_new(
     const instance: *PythonLoopObject = @ptrCast(@"type".tp_alloc.?(@"type", 0) orelse return error.PythonError);
     errdefer @"type".tp_free.?(instance);
 
-    instance.magic = LEVIATHAN_LOOP_MAGIC;
     instance.loop_obj = null;
 
     const contextvars_module: PyObject = python_c.PyImport_ImportModule("contextvars\x00")
@@ -42,10 +35,6 @@ inline fn z_loop_new(
 
     instance.contextvars_module = contextvars_module;
     instance.contextvars_copy = contextvars_copy;
-
-    instance.running = false;
-    instance.stopping = false;
-    instance.closed = false;
 
     return instance;
 }
@@ -60,27 +49,36 @@ pub fn loop_new(
     return @ptrCast(self);
 }
 
-inline fn loop_clear(py_loop: *PythonLoopObject) void {
+pub fn loop_clear(self: ?*PythonLoopObject) callconv(.C) c_int {
+    const py_loop = self.?;
     if (py_loop.loop_obj) |loop| {
-        if (!loop.closed) {
-            @panic("Loop is not closed, can't be deallocated");
-        }
-
-        if (loop.running) {
-            @panic("Loop is running, can't be deallocated");
-        }
-
-        loop.allocator.destroy(loop);
+        loop.release();
+        py_loop.loop_obj = null;
     }
 
     python_c.py_xdecref(py_loop.exception_handler);
     python_c.py_xdecref(py_loop.contextvars_module);
     python_c.py_xdecref(py_loop.contextvars_copy);
+
+    return 0;
+}
+
+pub fn loop_traverse(self: ?*PythonLoopObject, visit: python_c.visitproc, arg: ?*anyopaque) callconv(.C) c_int {
+    const instance = self.?;
+    return python_c.py_visit(
+        &[_]?*python_c.PyObject{
+            instance.exception_handler,
+            instance.contextvars_module,
+            instance.contextvars_copy,
+        }, visit, arg
+    );
 }
 
 pub fn loop_dealloc(self: ?*PythonLoopObject) callconv(.C) void {
     const instance = self.?;
-    loop_clear(instance);
+
+    python_c.PyObject_GC_UnTrack(instance);
+    _ = loop_clear(instance);
 
     const @"type": *python_c.PyTypeObject = @ptrCast(python_c.Py_TYPE(@ptrCast(instance)) orelse unreachable);
     @"type".tp_free.?(@ptrCast(instance));

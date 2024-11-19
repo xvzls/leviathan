@@ -14,8 +14,7 @@ const std = @import("std");
 
 
 pub fn loop_run_forever(self: ?*PythonLoopObject, _: ?PyObject) callconv(.C) ?PyObject {
-    const instance = self.?;
-    const loop_obj = instance.loop_obj.?;
+    const loop_obj = self.?.loop_obj.?;
     loop_obj.run_forever() catch return null;
 
     return python_c.get_py_none();
@@ -23,8 +22,7 @@ pub fn loop_run_forever(self: ?*PythonLoopObject, _: ?PyObject) callconv(.C) ?Py
 
 
 pub fn loop_stop(self: ?*PythonLoopObject, _: ?PyObject) callconv(.C) ?PyObject {
-    const instance = self.?;
-    const loop_obj = instance.loop_obj.?;
+    const loop_obj = self.?.loop_obj.?;
 
     const mutex = &loop_obj.mutex;
     mutex.lock();
@@ -35,8 +33,7 @@ pub fn loop_stop(self: ?*PythonLoopObject, _: ?PyObject) callconv(.C) ?PyObject 
 }
 
 pub fn loop_is_running(self: ?*PythonLoopObject, _: ?PyObject) callconv(.C) ?PyObject {
-    const instance = self.?;
-    const loop_obj = instance.loop_obj.?;
+    const loop_obj = self.?.loop_obj.?;
     const mutex = &loop_obj.mutex;
     mutex.lock();
     defer mutex.unlock();
@@ -45,8 +42,7 @@ pub fn loop_is_running(self: ?*PythonLoopObject, _: ?PyObject) callconv(.C) ?PyO
 }
 
 pub fn loop_is_closed(self: ?*PythonLoopObject, _: ?PyObject) callconv(.C) ?PyObject {
-    const instance = self.?;
-    const loop_obj = instance.loop_obj.?;
+    const loop_obj = self.?.loop_obj.?;
 
     const mutex = &loop_obj.mutex;
     mutex.lock();
@@ -56,8 +52,7 @@ pub fn loop_is_closed(self: ?*PythonLoopObject, _: ?PyObject) callconv(.C) ?PyOb
 }
 
 pub fn loop_close(self: ?*PythonLoopObject, _: ?PyObject) callconv(.C) ?PyObject {
-    const instance = self.?;
-    const loop_obj = instance.loop_obj.?;
+    const loop_obj = self.?.loop_obj.?;
 
     const mutex = &loop_obj.mutex;
     mutex.lock();
@@ -68,6 +63,6 @@ pub fn loop_close(self: ?*PythonLoopObject, _: ?PyObject) callconv(.C) ?PyObject
         return null;
     }
 
-    loop_obj.release();
+    loop_obj.closed = true;
     return python_c.get_py_none();
 }
