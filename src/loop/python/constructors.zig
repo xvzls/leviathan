@@ -56,9 +56,9 @@ pub fn loop_clear(self: ?*PythonLoopObject) callconv(.C) c_int {
         py_loop.loop_obj = null;
     }
 
-    python_c.py_xdecref(py_loop.exception_handler);
-    python_c.py_xdecref(py_loop.contextvars_module);
-    python_c.py_xdecref(py_loop.contextvars_copy);
+    python_c.py_decref_and_set_null(&py_loop.exception_handler);
+    python_c.py_decref_and_set_null(&py_loop.contextvars_module);
+    python_c.py_decref_and_set_null(&py_loop.contextvars_copy);
 
     return 0;
 }

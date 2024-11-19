@@ -69,9 +69,11 @@ pub var PythonFutureType = python_c.PyTypeObject{
     .tp_doc = "Leviathan's future class\x00",
     .tp_basicsize = @sizeOf(constructors.PythonFutureObject),
     .tp_itemsize = 0,
-    .tp_flags = python_c.Py_TPFLAGS_DEFAULT | python_c.Py_TPFLAGS_BASETYPE,
+    .tp_flags = python_c.Py_TPFLAGS_DEFAULT | python_c.Py_TPFLAGS_BASETYPE | python_c.Py_TPFLAGS_HAVE_GC,
     .tp_new = &constructors.future_new,
     .tp_init = @ptrCast(&constructors.future_init),
+    .tp_traverse = @ptrCast(&constructors.future_traverse),
+    .tp_clear = @ptrCast(&constructors.future_clear),
     .tp_dealloc = @ptrCast(&constructors.future_dealloc),
     .tp_methods = @constCast(PythonFutureMethods.ptr)
 };

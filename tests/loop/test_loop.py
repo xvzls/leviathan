@@ -1,12 +1,14 @@
-from leviathan import Loop
+from leviathan import Loop, ThreadSafeLoop
 
 from unittest.mock import MagicMock
-from typing import Any
+from typing import Type
+
 import pytest, asyncio, random
 
 
-def test_call_soon() -> None:
-	loop = Loop()
+@pytest.mark.parametrize("loop_obj", [Loop, ThreadSafeLoop])
+def test_call_soon(loop_obj: Type[asyncio.AbstractEventLoop]) -> None:
+	loop = loop_obj()
 	try:
 		calls_num = random.randint(1, 20)
 		mock_func = MagicMock()
@@ -18,8 +20,9 @@ def test_call_soon() -> None:
 		loop.close()
 
 
-def test_call_soon_with_cancel() -> None:
-	loop = Loop()
+@pytest.mark.parametrize("loop_obj", [Loop, ThreadSafeLoop])
+def test_call_soon_with_cancel(loop_obj: Type[asyncio.AbstractEventLoop]) -> None:
+	loop = loop_obj()
 	try:
 		calls_num = random.randint(1, 20)
 		mock_func = MagicMock()

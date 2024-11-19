@@ -119,6 +119,11 @@ pub fn remove_done_callback(self: *Future, callback_id: u64, callback_type: Call
 pub inline fn call_done_callbacks(self: *Future) !void {
     if (self.status != .PENDING) return error.FutureAlreadyFinished;
 
+    if (self.callbacks_queue.last_set == null) {
+        self.status = .FINISHED;
+        return;
+    }
+
     const pyfut: PyObject = @ptrCast(python_c.py_newref(self.py_future.?));
     errdefer python_c.py_decref(pyfut);
 

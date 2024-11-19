@@ -18,7 +18,6 @@ def test_setting_value_and_done(
 		assert future.done()
 	finally:
 		loop.close()
-		del loop
 
 
 @pytest.mark.parametrize("fut_obj, loop_obj", [
@@ -37,7 +36,6 @@ def test_cancelling_after_value(
 		assert future.done()
 	finally:
 		loop.close()
-		del loop
 
 
 @pytest.mark.parametrize("fut_obj, loop_obj", [
@@ -56,7 +54,6 @@ def test_cancelling_before_value(
 		assert future.done()
 	finally:
 		loop.close()
-		del loop
 
 	
 @pytest.mark.parametrize("fut_obj, loop_obj", [
@@ -74,7 +71,6 @@ def test_cancelling(
 		assert future.done()
 	finally:
 		loop.close()
-		del loop
 
 
 @pytest.mark.parametrize("fut_obj, loop_obj", [
@@ -95,7 +91,6 @@ def test_cancelling_with_message(
 		assert exc_info.value.args[0] == "test"
 	finally:
 		loop.close()
-		del loop
 
 
 @pytest.mark.parametrize("fut_obj, loop_obj", [
@@ -111,4 +106,3 @@ def test_initializing_with_wrong_loop(
 			fut_obj(loop=loop)
 	finally:
 		loop.close()
-		del loop

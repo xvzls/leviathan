@@ -67,23 +67,43 @@ pub fn future_new(
     return @ptrCast(self);
 }
 
-inline fn future_clear(py_future: *PythonFutureObject) void {
+pub fn future_clear(py_future: *PythonFutureObject) callconv(.C) c_int {
     if (py_future.future_obj) |future_obj| {
         future_obj.release();
+        py_future.future_obj = null;
     }
 
-    python_c.py_xdecref(@ptrCast(py_future.py_loop));
-    python_c.py_xdecref(py_future.exception);
-    python_c.py_xdecref(py_future.exception_tb);
-    python_c.py_xdecref(py_future.cancel_msg_py_object);
-    python_c.py_xdecref(py_future.invalid_state_exc);
-    python_c.py_xdecref(py_future.cancelled_error_exc);
-    python_c.py_xdecref(py_future.asyncio_module);
+    python_c.py_decref_and_set_null(@ptrCast(&py_future.py_loop));
+    python_c.py_decref_and_set_null(&py_future.exception);
+    python_c.py_decref_and_set_null(&py_future.exception_tb);
+    python_c.py_decref_and_set_null(&py_future.cancel_msg_py_object);
+    python_c.py_decref_and_set_null(&py_future.invalid_state_exc);
+    python_c.py_decref_and_set_null(&py_future.cancelled_error_exc);
+    python_c.py_decref_and_set_null(&py_future.asyncio_module);
+
+    return 0;
+}
+
+pub fn future_traverse(self: ?*PythonFutureObject, visit: python_c.visitproc, arg: ?*anyopaque) callconv(.C) c_int {
+    const instance = self.?;
+    return python_c.py_visit(
+        &[_]?*python_c.PyObject{
+            @ptrCast(instance.py_loop),
+            instance.exception,
+            instance.exception_tb,
+            instance.cancel_msg_py_object,
+            instance.invalid_state_exc,
+            instance.cancelled_error_exc,
+            instance.asyncio_module,
+        }, visit, arg
+    );
 }
 
 pub fn future_dealloc(self: ?*PythonFutureObject) callconv(.C) void {
     const instance = self.?;
-    future_clear(instance);
+
+    python_c.PyObject_GC_UnTrack(instance);
+    _ = future_clear(instance);
 
     const @"type": *python_c.PyTypeObject = @ptrCast(python_c.Py_TYPE(@ptrCast(instance)) orelse unreachable);
     @"type".tp_free.?(@ptrCast(instance));

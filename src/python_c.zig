@@ -53,6 +53,13 @@ pub inline fn py_xdecref(op: ?*Python.PyObject) void {
     }
 }
 
+pub inline fn py_decref_and_set_null(op: *?*Python.PyObject) void {
+    if (op.*) |o| {
+        py_decref(o);
+        op.* = null;
+    }
+}
+
 pub inline fn py_newref(op: anytype) @TypeOf(op) {
     Python.py_incref(@ptrCast(op));
     return op;
