@@ -20,7 +20,6 @@ class LeviathanTest(Command):
 		pass
 
 	def run(self) -> None:
-		print("Running zig tests...")
 		subprocess.check_call(["zig", "build", "test"])
 
 		self.run_command("build_ext")
@@ -30,14 +29,12 @@ class LeviathanTest(Command):
 
 class ZigBuildCommand(build_ext):
 	def run(self) -> None:
-		print(f"Building Zig code in {zig_mode} mode...")
 		subprocess.check_call(["zig", "build", "install", f"-Doptimize={zig_mode}"])
 		self.copy_zig_files()
 
 	def copy_zig_files(self) -> None:
 		build_dir = "./zig-out/lib"
 
-		print("Copying .so file...")
 		src_path = os.path.join(build_dir, "libleviathan.so")
 		src_path2 = os.path.join(build_dir, "libleviathan_single_thread.so")
 

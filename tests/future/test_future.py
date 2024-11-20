@@ -14,6 +14,7 @@ def test_setting_value_and_done(
 	try:
 		future = fut_obj(loop=loop)
 		future.set_result(42)
+		assert not(future.cancelled())
 		assert future.result() == 42
 		assert future.done()
 	finally:
@@ -31,7 +32,8 @@ def test_cancelling_after_value(
 	try:
 		future = fut_obj(loop=loop)
 		future.set_result(42)
-		future.cancel()
+		assert not(future.cancel())
+		assert not(future.cancelled())
 		assert future.result() == 42
 		assert future.done()
 	finally:
@@ -48,7 +50,7 @@ def test_cancelling_before_value(
 	loop = loop_obj()
 	try:
 		future = fut_obj(loop=loop)
-		future.cancel()
+		assert future.cancel()
 		with pytest.raises(asyncio.InvalidStateError):
 			future.set_result(42)
 		assert future.done()
@@ -66,9 +68,29 @@ def test_cancelling(
 	loop = loop_obj()
 	try:
 		future = fut_obj(loop=loop)
-		future.cancel()
+		assert future.cancel()
 		assert future.cancelled()
 		assert future.done()
+	finally:
+		loop.close()
+
+
+@pytest.mark.parametrize("fut_obj, loop_obj", [
+	(Future, Loop),
+	(ThreadSafeFuture, ThreadSafeLoop),
+])
+def test_setting_exception(
+	fut_obj: Type[asyncio.Future[int]], loop_obj: Type[asyncio.AbstractEventLoop]
+) -> None:
+	loop = loop_obj()
+	try:
+		future = fut_obj(loop=loop)
+		future.set_exception(RuntimeError("test"))
+		assert not(future.cancelled())
+		assert future.done()
+		with pytest.raises(RuntimeError) as exc_info:
+			future.result()
+		assert exc_info.value.args[0] == "test"
 	finally:
 		loop.close()
 
@@ -91,7 +113,6 @@ def test_cancelling_with_message(
 		assert exc_info.value.args[0] == "test"
 	finally:
 		loop.close()
-
 
 @pytest.mark.parametrize("fut_obj, loop_obj", [
 	(Future, ThreadSafeLoop),

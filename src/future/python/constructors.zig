@@ -21,7 +21,6 @@ pub const PythonFutureObject = extern struct {
     exception_tb: ?PyObject,
 
     cancel_msg_py_object: ?PyObject,
-    cancel_msg: ?[*:0]u8
 };
 
 inline fn z_future_new(
@@ -53,7 +52,6 @@ inline fn z_future_new(
     instance.exception_tb = null;
     instance.exception = null;
     instance.cancel_msg_py_object = null;
-    instance.cancel_msg = null;
     return instance;
 }
 
@@ -124,7 +122,9 @@ inline fn z_future_init(
 
     const leviathan_loop: *Loop.constructors.PythonLoopObject = @ptrCast(py_loop.?);
     if (python_c.PyObject_TypeCheck(@ptrCast(leviathan_loop), &Loop.PythonLoopType) == 0) {
-        utils.put_python_runtime_error_message("Invalid asyncio event loop. Only Leviathan's event loops are allowed\x00");
+        utils.put_python_runtime_error_message(
+            "Invalid asyncio event loop. Only Leviathan's event loops are allowed\x00"
+        );
         return error.PythonError;
     }
 

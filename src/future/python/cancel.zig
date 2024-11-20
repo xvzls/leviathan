@@ -20,21 +20,37 @@ pub fn future_cancel(self: ?*PythonFutureObject, args: ?PyObject, kwargs: ?PyObj
         .FINISHED,.CANCELED => return python_c.get_py_false(),
         else => {}
     }
-    const cancel_msg_py_object = args.?;
 
     var kwlist: [2][*c]u8 = undefined;
     kwlist[0] = @constCast("msg\x00");
     kwlist[1] = null;
 
-    var cancel_msg: ?[*:0]u8 = null;
+    var cancel_msg_py_object: ?PyObject = null;
 
-    if (python_c.PyArg_ParseTupleAndKeywords(args, kwargs, "|s:msg\x00", @ptrCast(&kwlist), &cancel_msg) < 0) {
+    if (
+        python_c.PyArg_ParseTupleAndKeywords(
+            args, kwargs, "|O:msg\x00", @ptrCast(&kwlist), &cancel_msg_py_object
+        ) < 0
+    ) {
         return null;
     }
 
-    instance.cancel_msg_py_object = cancel_msg_py_object;
-    instance.cancel_msg = cancel_msg;
-    obj.status = .CANCELED;
+    if (cancel_msg_py_object) |pyobj| {
+        if (python_c.PyUnicode_Check(pyobj) == 0) {
+            python_c.PyErr_SetString(python_c.PyExc_TypeError.?, "Cancel message must be a string\x00");
+            return null;
+        }
+
+        instance.cancel_msg_py_object = python_c.py_newref(pyobj);
+    }
+
+    obj.call_done_callbacks(.CANCELED) catch |err| {
+        const err_trace = @errorReturnTrace();
+        utils.print_error_traces(err_trace, err);
+        utils.put_python_runtime_error_message(@errorName(err));
+        return null;
+    };
+
     return python_c.get_py_true();
 }
 

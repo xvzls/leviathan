@@ -116,11 +116,11 @@ pub fn remove_done_callback(self: *Future, callback_id: u64, callback_type: Call
     };
 }
 
-pub inline fn call_done_callbacks(self: *Future) !void {
+pub inline fn call_done_callbacks(self: *Future, new_status: Future.FutureStatus) !void {
     if (self.status != .PENDING) return error.FutureAlreadyFinished;
 
     if (self.callbacks_queue.last_set == null) {
-        self.status = .FINISHED;
+        self.status = new_status;
         return;
     }
 
@@ -134,5 +134,5 @@ pub inline fn call_done_callbacks(self: *Future) !void {
         }
     });
 
-    self.status = .FINISHED;
+    self.status = new_status;
 }
