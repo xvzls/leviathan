@@ -31,15 +31,16 @@ pub fn future_result(self: ?*PythonFutureObject, _: ?PyObject) callconv(.C) ?PyO
         },
         .FINISHED => blk: {
             if (instance.exception) |exc| {
+                const new_exc = python_c.py_newref(exc);
                 if (instance.exception_tb) |exception_tb| {
-                    if (python_c.PyException_SetTraceback(exc, exception_tb) < 0) {
+                    if (python_c.PyException_SetTraceback(new_exc, exception_tb) < 0) {
                         utils.put_python_runtime_error_message(
                             "An error ocurred setting traceback to python exception\x00"
                         );
                         break :blk null;
                     }
                 }
-                python_c.PyErr_SetRaisedException(exc);
+                python_c.PyErr_SetRaisedException(new_exc);
                 break :blk null;
             }
             break :blk @as(PyObject, @alignCast(@ptrCast(obj.result.?)));
