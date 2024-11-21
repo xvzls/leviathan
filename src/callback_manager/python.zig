@@ -24,10 +24,10 @@ pub const FutureCallbacksSetData = struct {
 };
 
 pub const FutureCallbackData = struct {
+    args: []PyObject,
     exception_handler: PyObject,
     contextvars: PyObject,
     py_callback: PyObject,
-    py_future: PyObject,
     repeat: usize = 1,
     dec_future: bool = false
 };
@@ -81,16 +81,19 @@ pub inline fn callback_for_python_generic_callbacks(
 pub inline fn release_python_future_callback(data: FutureCallbackData) void {
     python_c.py_decref(data.contextvars);
     python_c.py_decref(data.py_callback);
-    if (data.dec_future) python_c.py_decref(data.py_future);
+    if (data.dec_future) python_c.py_decref(data.args[0]);
 }
 
 pub inline fn callback_for_python_future_callbacks(data: FutureCallbackData) CallbackManager.ExecuteCallbacksReturn {
     defer release_python_future_callback(data);
 
+    const args = data.args;
+    const args_ptr = args.ptr;
+    const args_len = args.len;
+
     const py_callback = data.py_callback;
-    const py_future = data.py_future;
     for (0..data.repeat) |_| {
-        const ret: ?PyObject = python_c.PyObject_CallOneArg(py_callback, py_future);
+        const ret: ?PyObject = python_c.PyObject_Vectorcall(py_callback, args_ptr, args_len, null);
         switch (deal_with_result(ret, data.exception_handler)) {
             .Continue => {},
             .Stop => return .Stop,

@@ -9,31 +9,6 @@ pub const PythonHandleObject = extern struct {
     cancelled: bool
 };
 
-pub inline fn callback_for_python_methods(py_handle: *PythonHandleObject) bool {
-    const ret: ?PyObject = python_c.PyObject_Vectorcall(
-        py_handle.py_callback.?, py_handle.args, @intCast(py_handle.nargs), null
-    );
-    if (ret) |value| {
-        python_c.py_decref(value);
-    }else{
-        if (
-            python_c.PyErr_ExceptionMatches(python_c.PyExc_SystemExit) > 0 or
-            python_c.PyErr_ExceptionMatches(python_c.PyExc_KeyboardInterrupt) > 0
-        ) {
-            return true;
-        }
-
-        const exception: PyObject = python_c.PyErr_GetRaisedException()
-            orelse return true;
-        defer python_c.py_decref(exception);
-
-        const exc_handler_ret: PyObject = python_c.PyObject_CallOneArg(py_handle.exception_handler.?, exception)
-            orelse return true;
-        python_c.py_decref(exc_handler_ret);
-    }
-    return false;
-}
-
 pub inline fn fast_new_handle(contextvars: PyObject) !*PythonHandleObject {
     const instance: *PythonHandleObject = @ptrCast(
         PythonHandleType.tp_alloc.?(&PythonHandleType, 0) orelse return error.PythonError

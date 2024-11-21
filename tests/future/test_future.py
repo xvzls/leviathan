@@ -1,4 +1,5 @@
 from leviathan import Future, ThreadSafeFuture, Loop, ThreadSafeLoop
+from unittest.mock import MagicMock
 from typing import Type, Any
 import pytest, asyncio
 
@@ -85,7 +86,9 @@ def test_setting_exception(
 	loop = loop_obj()
 	try:
 		future = fut_obj(loop=loop)
-		future.set_exception(RuntimeError("test"))
+		exc = RuntimeError("test")
+		future.set_exception(exc)
+		assert future.exception() is exc
 		assert not(future.cancelled())
 		assert future.done()
 		with pytest.raises(RuntimeError) as exc_info:
@@ -125,5 +128,23 @@ def test_initializing_with_wrong_loop(
 	try:
 		with pytest.raises(ValueError):
 			fut_obj(loop=loop)
+	finally:
+		loop.close()
+
+@pytest.mark.parametrize("fut_obj, loop_obj", [
+	(Future, Loop),
+	(ThreadSafeFuture, ThreadSafeLoop),
+])
+def test_adding_callback(
+	fut_obj: Type[asyncio.Future[Any]], loop_obj: Type[asyncio.AbstractEventLoop]
+) -> None:
+	loop = loop_obj()
+	try:
+		future = fut_obj(loop=loop)
+		mock_func = MagicMock()
+		future.add_done_callback(mock_func)
+		future.set_result(42)
+		assert future.done()
+		assert mock_func.call_count == 1
 	finally:
 		loop.close()

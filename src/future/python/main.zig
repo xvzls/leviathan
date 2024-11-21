@@ -51,13 +51,13 @@ const PythonFutureMethods: []const python_c.PyMethodDef = &[_]python_c.PyMethodD
         .ml_name = "add_done_callback\x00",
         .ml_meth = @ptrCast(&callbacks.future_add_done_callback),
         .ml_doc = "Add a callback to be run when the Future is done.\x00",
-        .ml_flags = python_c.METH_NOARGS
+        .ml_flags = python_c.METH_VARARGS
     },
     python_c.PyMethodDef{
         .ml_name = "remove_done_callback\x00",
         .ml_meth = @ptrCast(&callbacks.future_remove_done_callback),
         .ml_doc = "Remove callback from the callbacks list.\x00",
-        .ml_flags = python_c.METH_NOARGS
+        .ml_flags = python_c.METH_VARARGS
     },
     python_c.PyMethodDef{
         .ml_name = null, .ml_meth = null, .ml_doc = null, .ml_flags = 0
