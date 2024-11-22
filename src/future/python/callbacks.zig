@@ -7,7 +7,6 @@ const PythonFutureObject = constructors.PythonFutureObject;
 const Future = @import("../main.zig");
 
 const CallbackManager = @import("../../callback_manager/main.zig");
-const BTree = @import("../../utils/btree/btree.zig");
 
 const utils = @import("../../utils/utils.zig");
 
@@ -19,23 +18,6 @@ inline fn z_future_add_done_callback(self: *PythonFutureObject, args: PyObject) 
         return error.PythonError;
     }
 
-    const obj = self.future_obj.?;
-    const mutex = &obj.mutex;
-    mutex.lock();
-    defer mutex.unlock();
-
-    const status = obj.status;
-
-    var b_node: *BTree.Node = undefined;
-    const callback_id: u64 = @intCast(@intFromPtr(callback.?));
-    if (status != .PENDING) {
-        const incremented = try @call(
-            .always_inline, Future.check_done_callback_and_increment, .{obj, .PythonFuture, callback_id, &b_node}
-        );
-        if (incremented) {
-            return python_c.get_py_none();
-        }
-    }
 
     const py_loop = self.py_loop.?;
     if (context) |py_ctx| {
@@ -49,13 +31,19 @@ inline fn z_future_add_done_callback(self: *PythonFutureObject, args: PyObject) 
         orelse return error.PythonError;
     errdefer python_c.py_decref(contextvars_run_func);
 
+    const obj = self.future_obj.?;
+    const mutex = &obj.mutex;
+    mutex.lock();
+    defer mutex.unlock();
+
     const allocator = obj.callbacks_arena_allocator;
     const callback_args = try allocator.alloc(PyObject, 2);
     errdefer allocator.free(callback_args);
 
-    callback_args[0] = @ptrCast(self);
-    callback_args[1] = python_c.py_newref(callback.?);
-    errdefer python_c.py_decref(callback_args[1]);
+    callback_args[0] = python_c.py_newref(callback.?);
+    errdefer python_c.py_decref(callback_args[0]);
+
+    callback_args[1] = @ptrCast(self);
 
     const callback_data: CallbackManager.Callback = .{
         .PythonFuture = .{
@@ -66,10 +54,8 @@ inline fn z_future_add_done_callback(self: *PythonFutureObject, args: PyObject) 
         }
     };
 
-    switch (status) {
-        .PENDING => try @call(
-            .always_inline, Future.add_done_callback, .{obj, callback_data, callback_id, b_node}
-        ),
+    switch (obj.status) {
+        .PENDING => try obj.add_done_callback(callback_data),
         else => try obj.loop.?.call_soon_threadsafe(callback_data)
     }
 
@@ -92,7 +78,7 @@ pub fn future_remove_done_callback(self: ?*PythonFutureObject, args: ?PyObject) 
     mutex.lock();
     defer mutex.unlock();
 
-    const removed_count = obj.remove_done_callback(@intCast(@intFromPtr(callback.?)), .PythonFuture) catch |err| {
+    const removed_count = obj.remove_done_callback(@intCast(@intFromPtr(callback.?))) catch |err| {
         const err_trace = @errorReturnTrace();
         utils.print_error_traces(err_trace, err);
         utils.put_python_runtime_error_message(@errorName(err));

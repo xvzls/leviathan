@@ -28,87 +28,46 @@ pub fn create_python_handle(self: *Future, callback_data: PyObject) !CallbackMan
     };
 }
 
-pub fn check_done_callback_and_increment(
-    self: *Future, callback_type: CallbackManager.CallbackType,
-    callback_id: u64, b_node: **BTree.Node
-) !bool {
-    const callbacks_btree = switch (callback_type) {
-        .PythonFuture => self.python_callbacks,
-        .ZigGeneric => self.zig_callbacks,
-        else => return error.CallbackTypeNotSupported
-    };
-
-    const existing_handle: ?*CallbackManager.Callback = @alignCast(
-        @ptrCast(callbacks_btree.search(callback_id, b_node))
-    );
-    if (existing_handle) |handle| {
-        switch (callback_type) {
-            .PythonFuture => {
-                handle.ZigGeneric.repeat +|= 1;
-            },
-            .ZigGeneric => {
-                handle.PythonFuture.repeat +|= 1;
-            },
-            else => return error.CallbackTypeNotSupported
-        }
-
-        return true;
-    }
-
-    return false;
-}
-
-pub fn add_done_callback(
-    self: *Future, callback: CallbackManager.Callback,
-    callback_id: u64, b_node: *BTree.Node
+pub inline fn add_done_callback(
+    self: *Future, callback: CallbackManager.Callback
 ) !void {
     if (self.status != .PENDING) return error.FutureAlreadyFinished;
 
-    const callback_type = @as(CallbackManager.CallbackType, callback);
-    const callbacks_btree = switch (callback_type) {
-        .PythonFuture => self.python_callbacks,
-        .ZigGeneric => self.zig_callbacks,
-        else => return error.CallbackTypeNotSupported
-    };
-
     const allocator = self.callbacks_arena_allocator;
-    const handle: *CallbackManager.Callback = try CallbackManager.append_new_callback(
+    _ = try CallbackManager.append_new_callback(
         allocator, &self.callbacks_queue, callback, MaxCallbacks
     );
-
-    BTree.insert_in_node(callbacks_btree.allocator, b_node, callback_id, handle);
 }
 
-pub fn remove_done_callback(self: *Future, callback_id: u64, callback_type: CallbackManager.CallbackType) !usize {
-    const mutex = &self.mutex;
-    mutex.lock();
-    defer mutex.unlock();
-
+pub fn remove_done_callback(self: *Future, callback_id: u64) !usize {
     if (self.status != .PENDING) return error.FutureAlreadyFinished;
 
-    const callbacks_btree = switch (callback_type) {
-        .PythonFuture => self.python_callbacks,
-        .ZigGeneric => self.zig_callbacks,
-        else => return error.CallbackTypeNotSupported
-    };
+    const callbacks_queue = &self.callbacks_queue.queue;
+    var node = callbacks_queue.first;
+    var removed_count: usize = 0;
+    while (node) |n| {
+        node = n.next;
+        const queue: *CallbackManager.CallbacksSet = @alignCast(@ptrCast(n.data.?));
+        for (queue.callbacks[0..queue.callbacks_num]) |*callback| {
+            switch (@as(CallbackManager.CallbackType, callback.*)) {
+                .ZigGeneric => {
+                    if (@as(u64, @intFromPtr(callback.ZigGeneric.callback)) == callback_id) {
+                        callback.ZigGeneric.can_execute = false;
+                        removed_count += 1;
+                    }
+                },
+                .PythonFuture => {
+                    if (@as(u64, @intFromPtr(callback.PythonFuture.args[0])) == callback_id) {
+                        callback.PythonFuture.can_execute = false;
+                        removed_count += 1;
+                    }
+                },
+                else => unreachable
+            }
+        }
+    }
 
-    const handle: *CallbackManager.Callback = @alignCast(
-        @ptrCast(callbacks_btree.search(callback_id, null) orelse return error.CallbackNotFound)
-    );
-
-    return switch (callback_type) {
-        .ZigGeneric => blk: {
-            const repeat = handle.ZigGeneric.repeat;
-            handle.ZigGeneric.repeat = 0;
-            break :blk repeat;
-        },
-        .PythonFuture => blk: {
-            const repeat = handle.PythonFuture.repeat;
-            handle.PythonFuture.repeat = 0;
-            break :blk repeat;
-        },
-        else => return error.CallbackTypeNotSupported
-    };
+    return removed_count;
 }
 
 pub inline fn call_done_callbacks(self: *Future, new_status: Future.FutureStatus) !void {

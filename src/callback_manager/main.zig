@@ -17,7 +17,7 @@ pub const ZigGenericCallback = *const fn (?*anyopaque, status: ExecuteCallbacksR
 pub const ZigGenericCallbackData = struct {
     callback: ZigGenericCallback,
     data: ?*anyopaque,
-    repeat: usize = 1
+    can_execute: bool = true,
 };
 
 pub const Callback = union(CallbackType) {
@@ -103,7 +103,7 @@ pub inline fn run_callback(
     switch (status) {
         .Continue => {
             return switch (callback) {
-                .ZigGeneric => |data| data.callback(data.data, status),
+                .ZigGeneric => |data| data.callback(data.data, if (data.can_execute) status else .Stop),
                 .PythonGeneric => |data| PythonCallbacks.callback_for_python_generic_callbacks(allocator, data),
                 .PythonFutureCallbacksSet => |data| PythonCallbacks.callback_for_python_future_set_callbacks(
                     allocator, data, status
@@ -114,7 +114,7 @@ pub inline fn run_callback(
         else => {
             switch (callback) {
                 .ZigGeneric => |data| {
-                    _ = data.callback(data.data, status);
+                    _  = data.callback(data.data, status);
                 },
                 .PythonGeneric => |data| PythonCallbacks.release_python_generic_callback(allocator, data),
                 .PythonFutureCallbacksSet => |data| {

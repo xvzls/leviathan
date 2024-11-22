@@ -2,13 +2,13 @@ const python_c = @import("python_c");
 const PyObject = *python_c.PyObject;
 
 const utils = @import("../../utils/utils.zig");
-const allocator = utils.allocator;
 
 const Loop = @import("../main.zig");
 
 const constructors = @import("constructors.zig");
 const PythonLoopObject = constructors.PythonLoopObject;
-const LEVIATHAN_LOOP_MAGIC = constructors.LEVIATHAN_LOOP_MAGIC;
+
+const CallbackManager = @import("../../callback_manager/main.zig");
 
 const std = @import("std");
 
@@ -61,6 +61,11 @@ pub fn loop_close(self: ?*PythonLoopObject, _: ?PyObject) callconv(.C) ?PyObject
     if (loop_obj.running) {
         utils.put_python_runtime_error_message("Loop is running\x00");
         return null;
+    }
+
+    const allocator = loop_obj.allocator;
+    for (&loop_obj.ready_tasks_queues) |*ready_tasks_queue| {
+        _  = CallbackManager.execute_callbacks(allocator, ready_tasks_queue, .Stop, false);
     }
 
     loop_obj.closed = true;

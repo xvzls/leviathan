@@ -28,7 +28,7 @@ pub const FutureCallbackData = struct {
     exception_handler: PyObject,
     contextvars: PyObject,
     py_callback: PyObject,
-    repeat: usize = 1,
+    can_execute: bool = true,
     dec_future: bool = false
 };
 
@@ -81,24 +81,22 @@ pub inline fn callback_for_python_generic_callbacks(
 pub inline fn release_python_future_callback(data: FutureCallbackData) void {
     python_c.py_decref(data.contextvars);
     python_c.py_decref(data.py_callback);
-    if (data.dec_future) python_c.py_decref(data.args[0]);
+    python_c.py_decref(data.args[0]);
+    if (data.dec_future) python_c.py_decref(data.args[1]);
 }
 
 pub inline fn callback_for_python_future_callbacks(data: FutureCallbackData) CallbackManager.ExecuteCallbacksReturn {
     defer release_python_future_callback(data);
+    if (!data.can_execute) return .Continue;
 
     const args = data.args;
-    const args_ptr = args.ptr;
-    const args_len = args.len;
-
     const py_callback = data.py_callback;
-    for (0..data.repeat) |_| {
-        const ret: ?PyObject = python_c.PyObject_Vectorcall(py_callback, args_ptr, args_len, null);
-        switch (deal_with_result(ret, data.exception_handler)) {
-            .Continue => {},
-            .Stop => return .Stop,
-            .Exception => return .Exception
-        }
+
+    const ret: ?PyObject = python_c.PyObject_Vectorcall(py_callback, args.ptr, args.len, null);
+    switch (deal_with_result(ret, data.exception_handler)) {
+        .Continue => {},
+        .Stop => return .Stop,
+        .Exception => return .Exception
     }
 
     return .Continue;

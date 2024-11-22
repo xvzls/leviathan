@@ -8,7 +8,6 @@ const Handle = @import("../../handle.zig");
 
 const constructors = @import("constructors.zig");
 const PythonLoopObject = constructors.PythonLoopObject;
-const LEVIATHAN_LOOP_MAGIC = constructors.LEVIATHAN_LOOP_MAGIC;
 
 const std = @import("std");
 

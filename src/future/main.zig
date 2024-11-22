@@ -21,8 +21,6 @@ mutex: std.Thread.Mutex,
 callbacks_arena: std.heap.ArenaAllocator,
 callbacks_arena_allocator: std.mem.Allocator = undefined,
 callbacks_queue: CallbackManager.CallbacksSetsQueue = undefined,
-python_callbacks: *BTree = undefined,
-zig_callbacks: *BTree = undefined,
 loop: ?*Loop,
 
 py_future: ?*Future.constructors.PythonFutureObject = null,
@@ -42,12 +40,6 @@ pub fn init(allocator: std.mem.Allocator, loop: *Loop) !*Future {
     };
 
     fut.callbacks_arena_allocator = fut.callbacks_arena.allocator();
-    fut.zig_callbacks = try BTree.init(fut.callbacks_arena_allocator);
-    errdefer fut.zig_callbacks.release() catch unreachable;
-
-    fut.python_callbacks = try BTree.init(fut.callbacks_arena_allocator);
-    errdefer fut.python_callbacks.release() catch unreachable;
-
     fut.callbacks_queue = .{
         .queue = LinkedList.init(fut.callbacks_arena_allocator),
         .last_set = null

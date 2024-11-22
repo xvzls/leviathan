@@ -76,7 +76,6 @@ pub fn release(self: *Loop) void {
 
     const allocator = self.allocator;
     for (&self.ready_tasks_queues) |*ready_tasks_queue| {
-        _  = CallbackManager.execute_callbacks(allocator, ready_tasks_queue, .Stop, false);
         const queue = &ready_tasks_queue.queue;
         for (0..queue.len) |_| {
              const set: *CallbackManager.CallbacksSet = @alignCast(@ptrCast(queue.pop() catch unreachable));

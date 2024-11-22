@@ -5,8 +5,6 @@ const utils = @import("../../utils/utils.zig");
 
 const Loop = @import("../main.zig");
 
-pub const LEVIATHAN_LOOP_MAGIC = 0x4C4F4F5000000001;
-
 pub const PythonLoopObject = extern struct {
     ob_base: python_c.PyObject,
     loop_obj: ?*Loop,
