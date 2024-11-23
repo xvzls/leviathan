@@ -8,6 +8,21 @@ import pytest, asyncio
 	(Future, Loop),
 	(ThreadSafeFuture, ThreadSafeLoop),
 ])
+def test_getting_loop(
+	fut_obj: Type[asyncio.Future[Any]], loop_obj: Type[asyncio.AbstractEventLoop]
+) -> None:
+	loop = loop_obj()
+	try:
+		future = fut_obj(loop=loop)
+		assert future.get_loop() is loop
+	finally:
+		loop.close()
+
+
+@pytest.mark.parametrize("fut_obj, loop_obj", [
+	(Future, Loop),
+	(ThreadSafeFuture, ThreadSafeLoop),
+])
 def test_setting_value_and_done(
 	fut_obj: Type[asyncio.Future[int]], loop_obj: Type[asyncio.AbstractEventLoop]
 ) -> None:

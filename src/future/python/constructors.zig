@@ -140,3 +140,7 @@ pub fn future_init(
 ) callconv(.C) c_int {
     return utils.execute_zig_function(z_future_init, .{self.?, args, kwargs});
 }
+
+pub fn future_get_loop(self: ?*PythonFutureObject) callconv(.C) ?*Loop.constructors.PythonLoopObject {
+    return python_c.py_newref(self.?.py_loop);
+}
