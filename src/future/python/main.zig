@@ -4,6 +4,8 @@ const result = @import("result.zig");
 const cancel = @import("cancel.zig");
 const callbacks = @import("callbacks.zig");
 
+const iter = @import("iter.zig");
+
 const PythonFutureMethods: []const python_c.PyMethodDef = &[_]python_c.PyMethodDef{
     python_c.PyMethodDef{
         .ml_name = "result\x00",
@@ -70,6 +72,10 @@ const PythonFutureMethods: []const python_c.PyMethodDef = &[_]python_c.PyMethodD
     }
 };
 
+const PythonFutureAsyncMethods = python_c.PyAsyncMethods{
+    .am_await = @ptrCast(&constructors.future_iter),
+};
+
 pub var PythonFutureType = python_c.PyTypeObject{
     .tp_name = "leviathan.Future\x00",
     .tp_doc = "Leviathan's future class\x00",
@@ -81,6 +87,22 @@ pub var PythonFutureType = python_c.PyTypeObject{
     .tp_traverse = @ptrCast(&constructors.future_traverse),
     .tp_clear = @ptrCast(&constructors.future_clear),
     .tp_dealloc = @ptrCast(&constructors.future_dealloc),
+    .tp_iter = @ptrCast(&constructors.future_iter),
+    .tp_as_async = @constCast(&PythonFutureAsyncMethods),
     .tp_methods = @constCast(PythonFutureMethods.ptr)
+};
+
+pub var PythonFutureIterType = python_c.PyTypeObject{
+    .tp_name = "leviathan.FutureIter\x00",
+    .tp_doc = "Leviathan's iter future class\x00",
+    .tp_basicsize = @sizeOf(iter.PythonFutureIterObject),
+    .tp_itemsize = 0,
+    .tp_flags = python_c.Py_TPFLAGS_DEFAULT | python_c.Py_TPFLAGS_BASETYPE | python_c.Py_TPFLAGS_HAVE_GC,
+    .tp_new = &iter.future_iter_new,
+    .tp_init = @ptrCast(&iter.future_iter_init),
+    .tp_traverse = @ptrCast(&iter.future_iter_traverse),
+    .tp_clear = @ptrCast(&iter.future_iter_clear),
+    .tp_dealloc = @ptrCast(&iter.future_iter_dealloc),
+    .tp_iternext = @ptrCast(&iter.future_iter_iternext),
 };
 

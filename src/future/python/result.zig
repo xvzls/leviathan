@@ -16,23 +16,17 @@ inline fn raise_cancel_exception(self: *PythonFutureObject) void {
     }
 }
 
-
-pub fn future_result(self: ?*PythonFutureObject, _: ?PyObject) callconv(.C) ?PyObject {
-    const instance = self.?;
-    const obj = instance.future_obj.?;
-    const mutex = &obj.mutex;
-    mutex.lock();
-    defer mutex.unlock();
-
-    const result: ?PyObject = switch (obj.status) {
+pub inline fn get_result(self: *PythonFutureObject) ?PyObject {
+    const obj = self.future_obj.?;
+    return switch (obj.status) {
         .PENDING => blk: {
-            python_c.PyErr_SetString(instance.invalid_state_exc.?, "Result is not ready.\x00");
+            python_c.PyErr_SetString(self.invalid_state_exc.?, "Result is not ready.\x00");
             break :blk null;
         },
         .FINISHED => blk: {
-            if (instance.exception) |exc| {
+            if (self.exception) |exc| {
                 const new_exc = python_c.py_newref(exc);
-                if (instance.exception_tb) |exception_tb| {
+                if (self.exception_tb) |exception_tb| {
                     if (python_c.PyException_SetTraceback(new_exc, exception_tb) < 0) {
                         utils.put_python_runtime_error_message(
                             "An error ocurred setting traceback to python exception\x00"
@@ -46,12 +40,20 @@ pub fn future_result(self: ?*PythonFutureObject, _: ?PyObject) callconv(.C) ?PyO
             break :blk @as(PyObject, @alignCast(@ptrCast(obj.result.?)));
         },
         .CANCELED => blk: {
-            raise_cancel_exception(instance);
+            raise_cancel_exception(self);
             break :blk null;
         }
     };
+}
 
-    return result;
+
+pub fn future_result(self: ?*PythonFutureObject, _: ?PyObject) callconv(.C) ?PyObject {
+    const instance = self.?;
+    const mutex = &instance.future_obj.?.mutex;
+    mutex.lock();
+    defer mutex.unlock();
+
+    return get_result(instance);
 }
 
 pub fn future_exception(self: ?*PythonFutureObject, _: ?PyObject) callconv(.C) ?PyObject {

@@ -268,3 +268,27 @@ def test_adding_callbacks_after_setting_result(
 		assert mock_func3.call_count == 13
 	finally:
 		loop.close()
+
+@pytest.mark.parametrize("fut_obj, loop_obj", [
+	(Future, Loop),
+	(ThreadSafeFuture, ThreadSafeLoop),
+])
+def test_future_await(
+	fut_obj: Type[asyncio.Future[Any]], loop_obj: Type[asyncio.AbstractEventLoop]
+) -> None:
+	async def test_func(fut: asyncio.Future[int]) -> int:
+		result = await fut
+		return result
+
+	# TODO: Replace asyncio loop by leviathan
+	a_loop = asyncio.new_event_loop()
+	loop = loop_obj()
+	try:
+		future = fut_obj(loop=loop)
+		a_loop.call_later(0.1, future.set_result, 42)
+		result = a_loop.run_until_complete(test_func(future))
+		assert future.done()
+		assert future.result() == 42
+		assert result == 42
+	finally:
+		loop.close()

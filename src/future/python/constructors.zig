@@ -6,6 +6,8 @@ const utils = @import("../../utils/utils.zig");
 const Future = @import("../main.zig");
 const Loop = @import("../../loop/main.zig");
 
+const fut_iter = @import("iter.zig");
+
 const std = @import("std");
 
 pub const PythonFutureObject = extern struct {
@@ -65,7 +67,8 @@ pub fn future_new(
     return @ptrCast(self);
 }
 
-pub fn future_clear(py_future: *PythonFutureObject) callconv(.C) c_int {
+pub fn future_clear(self: ?*PythonFutureObject) callconv(.C) c_int {
+    const py_future = self.?;
     if (py_future.future_obj) |future_obj| {
         future_obj.release();
         py_future.future_obj = null;
@@ -143,4 +146,8 @@ pub fn future_init(
 
 pub fn future_get_loop(self: ?*PythonFutureObject) callconv(.C) ?*Loop.constructors.PythonLoopObject {
     return python_c.py_newref(self.?.py_loop);
+}
+
+pub fn future_iter(self: ?*PythonFutureObject) callconv(.C) ?*python_c.PyObject {
+    return @ptrCast(fut_iter.create_new_future_iter(self.?) catch null);
 }

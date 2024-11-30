@@ -11,6 +11,7 @@ const handle = leviathan.Handle;
 
 const leviathan_types = .{
     &future.PythonFutureType,
+    &future.PythonFutureIterType,
     &loop.PythonLoopType,
     &handle.PythonHandleType
 };
@@ -45,13 +46,21 @@ inline fn initialize_python_module() !*python_c.PyObject {
 
     const leviathan_modules_name = .{
         "Future\x00",
+        "FutureIter\x00",
         "Loop\x00",
         "Handle\x00"
     };
+    
+    const leviathan_module_can_be_added = .{
+        true, false, true, true
+    };
 
-    inline for (leviathan_modules_name, leviathan_types) |leviathan_module_name, leviathan_module_obj| {
+    inline for (
+        leviathan_modules_name, leviathan_module_can_be_added,
+        leviathan_types
+    ) |leviathan_module_name, can_be_added, leviathan_module_obj| {
         if (
-            python_c.PyModule_AddObject(
+            can_be_added and python_c.PyModule_AddObject(
                 module, leviathan_module_name, @as(*python_c.PyObject, @ptrCast(leviathan_module_obj))
             ) < 0
         ) {
