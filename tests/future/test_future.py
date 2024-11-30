@@ -277,6 +277,8 @@ def test_future_await(
 	fut_obj: Type[asyncio.Future[Any]], loop_obj: Type[asyncio.AbstractEventLoop]
 ) -> None:
 	async def test_func(fut: asyncio.Future[int]) -> int:
+		loop = asyncio.get_running_loop()
+		loop.call_soon(fut.set_result, 42)
 		result = await fut
 		return result
 
@@ -285,7 +287,6 @@ def test_future_await(
 	loop = loop_obj()
 	try:
 		future = fut_obj(loop=loop)
-		a_loop.call_later(0.1, future.set_result, 42)
 		result = a_loop.run_until_complete(test_func(future))
 		assert future.done()
 		assert future.result() == 42

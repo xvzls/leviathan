@@ -2,11 +2,10 @@ const python_c = @import("python_c");
 const PyObject = *python_c.PyObject;
 
 const utils = @import("../../utils/utils.zig");
+const result = @import("result.zig");
 
 const Future = @import("../main.zig");
 const Loop = @import("../../loop/main.zig");
-
-const fut_iter = @import("iter.zig");
 
 const std = @import("std");
 
@@ -149,5 +148,24 @@ pub fn future_get_loop(self: ?*PythonFutureObject) callconv(.C) ?*Loop.construct
 }
 
 pub fn future_iter(self: ?*PythonFutureObject) callconv(.C) ?*python_c.PyObject {
-    return @ptrCast(fut_iter.create_new_future_iter(self.?) catch null);
+    return @ptrCast(python_c.py_newref(self.?));
+}
+
+pub fn future_iternext(self: ?*PythonFutureObject) callconv(.C) ?*python_c.PyObject {
+    const instance = self.?;
+
+    const obj = instance.future_obj.?;
+    const mutex = &obj.mutex;
+    mutex.lock();
+    defer mutex.unlock();
+
+    if (obj.status != .PENDING) {
+        const res = result.get_result(obj.py_future.?);
+        if (res) |py_res| {
+            python_c.PyErr_SetObject(python_c.PyExc_StopIteration, py_res);
+        }
+        return null;
+    }
+
+    return python_c.get_py_none();
 }
