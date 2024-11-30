@@ -167,5 +167,6 @@ pub fn future_iternext(self: ?*PythonFutureObject) callconv(.C) ?*python_c.PyObj
         return null;
     }
 
+    // TODO: Return future object instead of None
     return python_c.get_py_none();
 }
