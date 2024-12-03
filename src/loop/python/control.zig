@@ -8,7 +8,7 @@ const Loop = @import("../main.zig");
 const constructors = @import("constructors.zig");
 const PythonLoopObject = constructors.PythonLoopObject;
 
-const CallbackManager = @import("../../callback_manager/main.zig");
+const CallbackManager = @import("../../callback_manager.zig");
 
 const std = @import("std");
 

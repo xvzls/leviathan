@@ -1,7 +1,9 @@
 const std = @import("std");
 
-const PythonCallbacks = @import("python.zig");
-const LinkedList = @import("../utils/linked_list.zig");
+const Future = @import("future/main.zig");
+const Handle = @import("handle.zig");
+
+const LinkedList = @import("utils/linked_list.zig");
 
 pub const ExecuteCallbacksReturn = enum {
     Stop,
@@ -22,9 +24,9 @@ pub const ZigGenericCallbackData = struct {
 
 pub const Callback = union(CallbackType) {
     ZigGeneric: ZigGenericCallbackData,
-    PythonGeneric: PythonCallbacks.GenericCallbackData,
-    PythonFutureCallbacksSet: PythonCallbacks.FutureCallbacksSetData,
-    PythonFuture: PythonCallbacks.FutureCallbackData
+    PythonGeneric: Handle.GenericCallbackData,
+    PythonFutureCallbacksSet: Future.FutureCallbacksSetData,
+    PythonFuture: Future.FutureCallbackData
 };
 
 pub const CallbacksSet = struct {
@@ -104,11 +106,11 @@ pub inline fn run_callback(
         .Continue => {
             return switch (callback) {
                 .ZigGeneric => |data| data.callback(data.data, if (data.can_execute) status else .Stop),
-                .PythonGeneric => |data| PythonCallbacks.callback_for_python_generic_callbacks(allocator, data),
-                .PythonFutureCallbacksSet => |data| PythonCallbacks.callback_for_python_future_set_callbacks(
+                .PythonGeneric => |data| Handle.callback_for_python_generic_callbacks(allocator, data),
+                .PythonFutureCallbacksSet => |data| Future.callback_for_python_future_set_callbacks(
                     allocator, data, status
                 ),
-                .PythonFuture => |data| PythonCallbacks.callback_for_python_future_callbacks(data),
+                .PythonFuture => |data| Future.callback_for_python_future_callbacks(data),
             };
         },
         else => {
@@ -116,13 +118,13 @@ pub inline fn run_callback(
                 .ZigGeneric => |data| {
                     _  = data.callback(data.data, status);
                 },
-                .PythonGeneric => |data| PythonCallbacks.release_python_generic_callback(allocator, data),
+                .PythonGeneric => |data| Handle.release_python_generic_callback(allocator, data),
                 .PythonFutureCallbacksSet => |data| {
-                    _ = PythonCallbacks.callback_for_python_future_set_callbacks(
+                    _ = Future.callback_for_python_future_set_callbacks(
                         allocator, data, status
                     );
                 },
-                .PythonFuture => |data| PythonCallbacks.release_python_future_callback(data),
+                .PythonFuture => |data| Future.release_python_future_callback(data),
             }
             return .Continue;
         }

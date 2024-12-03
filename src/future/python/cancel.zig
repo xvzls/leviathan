@@ -67,4 +67,3 @@ pub fn future_cancelled(self: ?*PythonFutureObject, _: ?PyObject) callconv(.C) ?
         else => python_c.get_py_false()
     };
 }
-

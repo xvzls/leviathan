@@ -13,6 +13,7 @@ pub const PythonFutureObject = extern struct {
     ob_base: python_c.PyObject,
     future_obj: ?*Future,
 
+    // TODO: Move this to loop object. To be imported only once
     asyncio_module: ?PyObject,
     invalid_state_exc: ?PyObject,
     cancelled_error_exc: ?PyObject,
@@ -22,6 +23,7 @@ pub const PythonFutureObject = extern struct {
     exception_tb: ?PyObject,
 
     cancel_msg_py_object: ?PyObject,
+    blocking: u64
 };
 
 inline fn z_future_new(

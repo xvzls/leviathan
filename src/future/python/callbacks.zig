@@ -1,3 +1,5 @@
+const builtin = @import("builtin");
+
 const python_c = @import("python_c");
 const PyObject = *python_c.PyObject;
 
@@ -6,7 +8,7 @@ const PythonFutureObject = constructors.PythonFutureObject;
 
 const Future = @import("../main.zig");
 
-const CallbackManager = @import("../../callback_manager/main.zig");
+const CallbackManager = @import("../../callback_manager.zig");
 
 const utils = @import("../../utils/utils.zig");
 
@@ -45,7 +47,7 @@ inline fn z_future_add_done_callback(self: *PythonFutureObject, args: PyObject) 
 
     callback_args[1] = @ptrCast(self);
 
-    const callback_data: CallbackManager.Callback = .{
+    var callback_data: CallbackManager.Callback = .{
         .PythonFuture = .{
             .args = callback_args,
             .exception_handler = py_loop.exception_handler.?,
@@ -56,7 +58,17 @@ inline fn z_future_add_done_callback(self: *PythonFutureObject, args: PyObject) 
 
     switch (obj.status) {
         .PENDING => try obj.add_done_callback(callback_data),
-        else => try obj.loop.?.call_soon_threadsafe(callback_data)
+        else => {
+            python_c.py_incref(@ptrCast(self));
+            errdefer python_c.py_decref(@ptrCast(self));
+
+            callback_data.PythonFuture.dec_future = true;
+            if (builtin.single_threaded) {
+                try obj.loop.?.call_soon(callback_data);
+            }else{
+                try obj.loop.?.call_soon_threadsafe(callback_data);
+            }
+        }
     }
 
     return python_c.get_py_none();

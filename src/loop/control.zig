@@ -1,7 +1,7 @@
 const LinkedList = @import("../utils/linked_list.zig");
 
 const Loop = @import("main.zig");
-const CallbackManager = @import("../callback_manager/main.zig");
+const CallbackManager = @import("../callback_manager.zig");
 
 const utils = @import("../utils/utils.zig");
 const python_c = @import("python_c");

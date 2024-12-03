@@ -8,6 +8,20 @@ import pytest, asyncio
 	(Future, Loop),
 	(ThreadSafeFuture, ThreadSafeLoop),
 ])
+def test_checking_subclassing(
+	fut_obj: Type[asyncio.Future[Any]], loop_obj: Type[asyncio.AbstractEventLoop]
+) -> None:
+	loop = loop_obj()
+	try:
+		assert asyncio.isfuture(fut_obj(loop=loop))
+	finally:
+		loop.close()
+
+
+@pytest.mark.parametrize("fut_obj, loop_obj", [
+	(Future, Loop),
+	(ThreadSafeFuture, ThreadSafeLoop),
+])
 def test_getting_loop(
 	fut_obj: Type[asyncio.Future[Any]], loop_obj: Type[asyncio.AbstractEventLoop]
 ) -> None:

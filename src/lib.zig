@@ -25,7 +25,7 @@ var leviathan_module = python_c.PyModuleDef{
     .m_size = -1,
 };
 
-inline fn initialize_leviathan_types() !void {
+fn initialize_leviathan_types() !void {
     inline for (leviathan_types) |v| {
         if (python_c.PyType_Ready(v) < 0) {
             return error.PythonError;
@@ -33,13 +33,13 @@ inline fn initialize_leviathan_types() !void {
     }
 }
 
-inline fn deinitialize_leviathan_types() void {
+fn deinitialize_leviathan_types() void {
     inline for (leviathan_types) |v| {
         python_c.py_decref(@ptrCast(v));
     }
 }
 
-inline fn initialize_python_module() !*python_c.PyObject {
+fn initialize_python_module() !*python_c.PyObject {
     const module: *python_c.PyObject = python_c.PyModule_Create(&leviathan_module) orelse return error.PythonError;
     errdefer python_c.py_decref(module);
 

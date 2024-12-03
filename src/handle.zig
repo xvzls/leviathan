@@ -1,6 +1,10 @@
+const std = @import("std");
+const builtin = @import("builtin");
+
 const python_c = @import("python_c");
 const PyObject = *python_c.PyObject;
 
+const CallbackManager = @import("callback_manager.zig");
 const utils = @import("utils/utils.zig");
 
 pub const PythonHandleObject = extern struct {
@@ -8,6 +12,62 @@ pub const PythonHandleObject = extern struct {
     contextvars: ?PyObject,
     cancelled: bool
 };
+
+pub const GenericCallbackData = struct {
+    args: []PyObject,
+    exception_handler: PyObject,
+    py_callback: PyObject,
+    py_handle: *PythonHandleObject,
+    cancelled: *bool,
+};
+
+pub inline fn release_python_generic_callback(allocator: std.mem.Allocator, data: GenericCallbackData) void {
+    for (data.args) |arg| python_c.py_decref(arg);
+    allocator.free(data.args);
+
+    python_c.py_decref(data.py_callback);
+    python_c.py_decref(@ptrCast(data.py_handle));
+}
+
+pub inline fn callback_for_python_generic_callbacks(
+    allocator: std.mem.Allocator, data: GenericCallbackData
+) CallbackManager.ExecuteCallbacksReturn {
+    defer release_python_generic_callback(allocator, data);
+
+    if (builtin.single_threaded) {
+        if (data.cancelled.*) {
+            return .Continue;
+        }
+    }else{
+        if (@atomicLoad(bool, data.cancelled, .monotonic)) {
+            return .Continue;
+        }
+    }
+
+    const result: ?PyObject = python_c.PyObject_Vectorcall(
+        data.py_callback, data.args.ptr, @intCast(data.args.len), null
+    );
+    if (result) |value| {
+        python_c.py_decref(value);
+    }else{
+        if (
+            python_c.PyErr_ExceptionMatches(python_c.PyExc_SystemExit) > 0 or
+            python_c.PyErr_ExceptionMatches(python_c.PyExc_KeyboardInterrupt) > 0
+        ) {
+            return .Exception;
+        }
+
+        const exception: PyObject = python_c.PyErr_GetRaisedException()
+            orelse return .Exception;
+        defer python_c.py_decref(exception);
+
+        const exc_handler_ret: PyObject = python_c.PyObject_CallOneArg(data.exception_handler, exception)
+            orelse return .Exception;
+        python_c.py_decref(exc_handler_ret);
+    }
+
+    return .Continue;
+}
 
 pub inline fn fast_new_handle(contextvars: PyObject) !*PythonHandleObject {
     const instance: *PythonHandleObject = @ptrCast(

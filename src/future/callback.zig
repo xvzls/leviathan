@@ -1,6 +1,7 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
-const CallbackManager = @import("../callback_manager/main.zig");
+const CallbackManager = @import("../callback_manager.zig");
 const Future = @import("main.zig");
 
 const BTree = @import("../utils/btree/btree.zig");
@@ -9,6 +10,64 @@ const python_c = @import("python_c");
 const PyObject = *python_c.PyObject;
 
 const MaxCallbacks = 8;
+
+pub const FutureCallbacksSetData = struct {
+    sets_queue: *CallbackManager.CallbacksSetsQueue,
+    future: PyObject,
+};
+
+pub const FutureCallbackData = struct {
+    args: []PyObject,
+    exception_handler: PyObject,
+    contextvars: PyObject,
+    py_callback: PyObject,
+    can_execute: bool = true,
+    dec_future: bool = false
+};
+
+pub inline fn release_python_future_callback(data: FutureCallbackData) void {
+    python_c.py_decref(data.contextvars);
+    python_c.py_decref(data.py_callback);
+    python_c.py_decref(data.args[0]);
+    if (data.dec_future) python_c.py_decref(data.args[1]);
+}
+
+pub inline fn callback_for_python_future_callbacks(data: FutureCallbackData) CallbackManager.ExecuteCallbacksReturn {
+    defer release_python_future_callback(data);
+    if (!data.can_execute) return .Continue;
+
+    const args = data.args;
+    const py_callback = data.py_callback;
+
+    const result: ?PyObject = python_c.PyObject_Vectorcall(py_callback, args.ptr, args.len, null);
+    if (result) |value| {
+        python_c.py_decref(value);
+    }else{
+        if (
+            python_c.PyErr_ExceptionMatches(python_c.PyExc_SystemExit) > 0 or
+            python_c.PyErr_ExceptionMatches(python_c.PyExc_KeyboardInterrupt) > 0
+        ) {
+            return .Exception;
+        }
+
+        const exception: PyObject = python_c.PyErr_GetRaisedException()
+            orelse return .Exception;
+        defer python_c.py_decref(exception);
+
+        const exc_handler_ret: PyObject = python_c.PyObject_CallOneArg(data.exception_handler, exception)
+            orelse return .Exception;
+        python_c.py_decref(exc_handler_ret);
+    }
+
+    return .Continue;
+}
+
+pub inline fn callback_for_python_future_set_callbacks(
+    allocator: std.mem.Allocator, data: FutureCallbacksSetData, status: CallbackManager.ExecuteCallbacksReturn
+) CallbackManager.ExecuteCallbacksReturn {
+    defer python_c.py_decref(data.future);
+    return CallbackManager.execute_callbacks(allocator, data.sets_queue, status, false);
+}
 
 pub fn create_python_handle(self: *Future, callback_data: PyObject) !CallbackManager.Callback {
     var py_callback: ?PyObject = null;
@@ -81,12 +140,18 @@ pub inline fn call_done_callbacks(self: *Future, new_status: Future.FutureStatus
     const pyfut: PyObject = @ptrCast(python_c.py_newref(self.py_future.?));
     errdefer python_c.py_decref(pyfut);
 
-    try self.loop.?.call_soon_threadsafe(.{
+    const loop = self.loop.?;
+    const callback = .{
         .PythonFutureCallbacksSet = .{
             .sets_queue = &self.callbacks_queue,
             .future = pyfut
         }
-    });
+    };
+    if (builtin.single_threaded) {
+        try loop.call_soon(callback);
+    }else{
+        try loop.call_soon_threadsafe(callback);
+    }
 
     self.status = new_status;
 }

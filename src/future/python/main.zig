@@ -70,6 +70,18 @@ const PythonFutureMethods: []const python_c.PyMethodDef = &[_]python_c.PyMethodD
     }
 };
 
+const PythonFutureMembers: []const python_c.PyMemberDef = &[_]python_c.PyMemberDef{
+    python_c.PyMemberDef{ // Just for be supported by asyncio.isfuture
+        .name = "_asyncio_future_blocking\x00",
+        .type = python_c.Py_T_BOOL,
+        .offset = @offsetOf(constructors.PythonFutureObject, "blocking"),
+        .doc = null,
+    },
+    python_c.PyMemberDef{
+        .name = null, .flags = 0, .offset = 0, .doc = null
+    }
+};
+
 const PythonFutureAsyncMethods = python_c.PyAsyncMethods{
     .am_await = @ptrCast(&constructors.future_iter),
 };
@@ -88,5 +100,6 @@ pub var PythonFutureType = python_c.PyTypeObject{
     .tp_iter = @ptrCast(&constructors.future_iter),
     .tp_iternext = @ptrCast(&constructors.future_iternext),
     .tp_as_async = @constCast(&PythonFutureAsyncMethods),
-    .tp_methods = @constCast(PythonFutureMethods.ptr)
+    .tp_methods = @constCast(PythonFutureMethods.ptr),
+    .tp_members = @constCast(PythonFutureMembers.ptr),
 };
