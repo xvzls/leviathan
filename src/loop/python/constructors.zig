@@ -9,6 +9,13 @@ pub const PythonLoopObject = extern struct {
     ob_base: python_c.PyObject,
     loop_obj: ?*Loop,
 
+    asyncio_module: ?PyObject,
+    invalid_state_exc: ?PyObject,
+    cancelled_error_exc: ?PyObject,
+    
+    enter_task_func: ?PyObject,
+    leave_task_func: ?PyObject,
+
     contextvars_module: ?PyObject,
     contextvars_copy: ?PyObject,
     exception_handler: ?PyObject,
@@ -30,6 +37,33 @@ inline fn z_loop_new(
     const contextvars_copy: PyObject = python_c.PyObject_GetAttrString(contextvars_module, "copy_context\x00")
         orelse return error.PythonError;
     errdefer python_c.py_decref(contextvars_copy);
+
+    const asyncio_module: PyObject = python_c.PyImport_ImportModule("asyncio\x00")
+        orelse return error.PythonError;
+    errdefer python_c.py_decref(asyncio_module);
+
+    const invalid_state_exc: PyObject = python_c.PyObject_GetAttrString(asyncio_module, "InvalidStateError\x00")
+        orelse return error.PythonError;
+    errdefer python_c.py_decref(invalid_state_exc);
+
+    const cancelled_error_exc: PyObject = python_c.PyObject_GetAttrString(asyncio_module, "CancelledError\x00")
+        orelse return error.PythonError;
+    errdefer python_c.py_decref(cancelled_error_exc);
+
+    const enter_task_func: PyObject = python_c.PyObject_GetAttrString(asyncio_module, "_enter_task\x00")
+        orelse return error.PythonError;
+    errdefer python_c.py_decref(enter_task_func);
+
+    const leave_task_func: PyObject = python_c.PyObject_GetAttrString(asyncio_module, "_leave_task\x00")
+        orelse return error.PythonError;
+    errdefer python_c.py_decref(leave_task_func);
+
+    instance.asyncio_module = asyncio_module;
+    instance.cancelled_error_exc = cancelled_error_exc;
+    instance.invalid_state_exc = invalid_state_exc;
+
+    instance.enter_task_func = enter_task_func;
+    instance.leave_task_func = leave_task_func;
 
     instance.contextvars_module = contextvars_module;
     instance.contextvars_copy = contextvars_copy;
@@ -54,6 +88,10 @@ pub fn loop_clear(self: ?*PythonLoopObject) callconv(.C) c_int {
         py_loop.loop_obj = null;
     }
 
+    python_c.py_decref_and_set_null(&py_loop.asyncio_module);
+    python_c.py_decref_and_set_null(&py_loop.invalid_state_exc);
+    python_c.py_decref_and_set_null(&py_loop.cancelled_error_exc);
+
     python_c.py_decref_and_set_null(&py_loop.exception_handler);
     python_c.py_decref_and_set_null(&py_loop.contextvars_module);
     python_c.py_decref_and_set_null(&py_loop.contextvars_copy);
@@ -65,6 +103,9 @@ pub fn loop_traverse(self: ?*PythonLoopObject, visit: python_c.visitproc, arg: ?
     const instance = self.?;
     return python_c.py_visit(
         &[_]?*python_c.PyObject{
+            instance.asyncio_module,
+            instance.invalid_state_exc,
+            instance.cancelled_error_exc,
             instance.exception_handler,
             instance.contextvars_module,
             instance.contextvars_copy,

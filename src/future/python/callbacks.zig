@@ -13,13 +13,12 @@ const CallbackManager = @import("../../callback_manager.zig");
 const utils = @import("../../utils/utils.zig");
 
 inline fn z_future_add_done_callback(self: *PythonFutureObject, args: PyObject) !PyObject {
-    var callback: ?PyObject = undefined;
+    var callback: ?PyObject = null;
     var context: ?PyObject = null;
 
     if (python_c.PyArg_ParseTuple(args, "O|O:context\x00", &callback, &context) < 0) {
         return error.PythonError;
     }
-
 
     const py_loop = self.py_loop.?;
     if (context) |py_ctx| {
@@ -27,7 +26,7 @@ inline fn z_future_add_done_callback(self: *PythonFutureObject, args: PyObject) 
     }else {
         context = python_c.PyObject_CallNoArgs(py_loop.contextvars_copy.?) orelse return error.PythonError;
     }
-    errdefer python_c.py_decref(context.?);
+    defer python_c.py_decref(context.?);
 
     const contextvars_run_func: PyObject = python_c.PyObject_GetAttrString(context.?, "run\x00")
         orelse return error.PythonError;
@@ -51,7 +50,7 @@ inline fn z_future_add_done_callback(self: *PythonFutureObject, args: PyObject) 
         .PythonFuture = .{
             .args = callback_args,
             .exception_handler = py_loop.exception_handler.?,
-            .contextvars = context.?,
+            // .contextvars = context.?,
             .py_callback = contextvars_run_func,
         }
     };

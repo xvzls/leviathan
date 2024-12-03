@@ -19,14 +19,14 @@ pub const FutureCallbacksSetData = struct {
 pub const FutureCallbackData = struct {
     args: []PyObject,
     exception_handler: PyObject,
-    contextvars: PyObject,
+    // contextvars: PyObject,
     py_callback: PyObject,
     can_execute: bool = true,
     dec_future: bool = false
 };
 
 pub inline fn release_python_future_callback(data: FutureCallbackData) void {
-    python_c.py_decref(data.contextvars);
+    // python_c.py_decref(data.contextvars);
     python_c.py_decref(data.py_callback);
     python_c.py_decref(data.args[0]);
     if (data.dec_future) python_c.py_decref(data.args[1]);

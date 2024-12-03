@@ -13,7 +13,6 @@ pub const PythonFutureObject = extern struct {
     ob_base: python_c.PyObject,
     future_obj: ?*Future,
 
-    // TODO: Move this to loop object. To be imported only once
     asyncio_module: ?PyObject,
     invalid_state_exc: ?PyObject,
     cancelled_error_exc: ?PyObject,
@@ -33,28 +32,16 @@ inline fn z_future_new(
     const instance: *PythonFutureObject = @ptrCast(@"type".tp_alloc.?(@"type", 0) orelse return error.PythonError);
     errdefer @"type".tp_free.?(instance);
 
+    instance.asyncio_module = null;
+    instance.invalid_state_exc = null;
+    instance.cancelled_error_exc = null;
+
     instance.future_obj = null;
-
-    const asyncio_module: PyObject = python_c.PyImport_ImportModule("asyncio\x00")
-        orelse return error.PythonError;
-    errdefer python_c.py_decref(asyncio_module);
-
-    instance.asyncio_module = asyncio_module;
-
-    const invalid_state_exc: PyObject = python_c.PyObject_GetAttrString(asyncio_module, "InvalidStateError\x00")
-        orelse return error.PythonError;
-    errdefer python_c.py_decref(invalid_state_exc);
-
-    const cancelled_error_exc: PyObject = python_c.PyObject_GetAttrString(asyncio_module, "CancelledError\x00")
-        orelse return error.PythonError;
-    errdefer python_c.py_decref(cancelled_error_exc);
-
-    instance.cancelled_error_exc = cancelled_error_exc;
-    instance.invalid_state_exc = invalid_state_exc;
-
     instance.exception_tb = null;
     instance.exception = null;
+
     instance.cancel_msg_py_object = null;
+    instance.blocking = 0;
     return instance;
 }
 
@@ -79,9 +66,6 @@ pub fn future_clear(self: ?*PythonFutureObject) callconv(.C) c_int {
     python_c.py_decref_and_set_null(&py_future.exception);
     python_c.py_decref_and_set_null(&py_future.exception_tb);
     python_c.py_decref_and_set_null(&py_future.cancel_msg_py_object);
-    python_c.py_decref_and_set_null(&py_future.invalid_state_exc);
-    python_c.py_decref_and_set_null(&py_future.cancelled_error_exc);
-    python_c.py_decref_and_set_null(&py_future.asyncio_module);
 
     return 0;
 }
@@ -114,7 +98,7 @@ pub fn future_dealloc(self: ?*PythonFutureObject) callconv(.C) void {
 inline fn z_future_init(
     self: *PythonFutureObject, args: ?PyObject, kwargs: ?PyObject
 ) !c_int {
-    var kwlist: [3][*c]u8 = undefined;
+    var kwlist: [2][*c]u8 = undefined;
     kwlist[0] = @constCast("loop\x00");
     kwlist[1] = null;
 
@@ -135,6 +119,10 @@ inline fn z_future_init(
     self.future_obj = try Future.init(leviathan_loop.loop_obj.?.allocator, leviathan_loop.loop_obj.?);
     self.future_obj.?.py_future = self;
     self.py_loop = python_c.py_newref(leviathan_loop);
+
+    self.asyncio_module = leviathan_loop.asyncio_module.?;
+    self.invalid_state_exc = leviathan_loop.invalid_state_exc.?;
+    self.cancelled_error_exc = leviathan_loop.cancelled_error_exc.?;
 
     return 0;
 }
