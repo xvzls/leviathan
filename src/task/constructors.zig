@@ -174,7 +174,7 @@ inline fn z_task_init(
     return 0;
 }
 
-pub fn future_init(
+pub fn task_init(
     self: ?*PythonTaskObject, args: ?PyObject, kwargs: ?PyObject
 ) callconv(.C) c_int {
     return utils.execute_zig_function(z_task_init, .{self.?, args, kwargs});

@@ -96,10 +96,10 @@ const PythonTaskMembers: []const python_c.PyMemberDef = &[_]python_c.PyMemberDef
     }
 };
 
-pub var PythonFutureType = python_c.PyTypeObject{
+pub var PythonTaskType = python_c.PyTypeObject{
     .tp_name = "leviathan.Task\x00",
     .tp_doc = "Leviathan's task class\x00",
-    .tp_base = &Future.constructors.PythonFutureType,
+    .tp_base = &Future.PythonFutureType,
     .tp_basicsize = @sizeOf(constructors.PythonTaskObject),
     .tp_itemsize = 0,
     .tp_flags = python_c.Py_TPFLAGS_DEFAULT | python_c.Py_TPFLAGS_BASETYPE | python_c.Py_TPFLAGS_HAVE_GC,

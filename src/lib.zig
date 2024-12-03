@@ -6,11 +6,13 @@ const leviathan = @import("leviathan");
 
 const utils = leviathan.utils.utils;
 const future = leviathan.Future;
+const task = leviathan.Task;
 const loop = leviathan.Loop;
 const handle = leviathan.Handle;
 
 const leviathan_types = .{
     &future.PythonFutureType,
+    &task.PythonTaskType,
     &loop.PythonLoopType,
     &handle.PythonHandleType
 };
@@ -45,6 +47,7 @@ fn initialize_python_module() !*python_c.PyObject {
 
     const leviathan_modules_name = .{
         "Future\x00",
+        "Task\x00",
         "Loop\x00",
         "Handle\x00"
     };

@@ -33,7 +33,7 @@ pub fn task_set_name(self: ?*constructors.PythonTaskObject, args: ?PyObject) cal
 
     if (python_c.PyUnicode_Check(name.?) == 0) {
         python_c.PyErr_SetString(python_c.PyExc_TypeError, "name must be a string\x00");
-        return;
+        return null;
     }
 
     const obj = instance.fut.future_obj.?;
@@ -68,7 +68,7 @@ pub fn task_get_stack(self: ?*constructors.PythonTaskObject, args: ?PyObject, kw
         orelse return null;
     defer python_c.Py_DecRef(get_stack_func);
 
-    const stack: PyObject = python_c.PyObject_CallFunctionObjArgs(get_stack_func, instance, limit, null)
+    const stack: PyObject = python_c.PyObject_CallFunctionObjArgs(get_stack_func, instance, limit, @as(?PyObject, null))
         orelse return null;
 
     return python_c.py_newref(stack);
@@ -99,6 +99,8 @@ pub fn task_print_stack(self: ?*constructors.PythonTaskObject, args: ?PyObject, 
         orelse return null;
     defer python_c.py_decref(print_stack_func);
 
-    const result: ?PyObject = python_c.PyObject_CallFunctionObjArgs(print_stack_func, instance, limit, file, null);
+    const result: ?PyObject = python_c.PyObject_CallFunctionObjArgs(
+        print_stack_func, instance, limit, file, @as(?PyObject, null)
+    );
     return result;
 }
