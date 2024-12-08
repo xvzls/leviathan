@@ -155,7 +155,7 @@ def test_initializing_with_wrong_loop(
 ) -> None:
 	loop = loop_obj()
 	try:
-		with pytest.raises(ValueError):
+		with pytest.raises(TypeError):
 			fut_obj(loop=loop)
 	finally:
 		loop.close()

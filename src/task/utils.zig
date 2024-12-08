@@ -27,12 +27,7 @@ pub fn task_set_name(self: ?*constructors.PythonTaskObject, args: ?PyObject) cal
     const instance = self.?;
 
     var name: ?PyObject = null;
-    if (python_c.PyArg_Parse(args, "O\x00", &name) < 0) {
-        return null;
-    }
-
-    if (python_c.PyUnicode_Check(name.?) == 0) {
-        python_c.PyErr_SetString(python_c.PyExc_TypeError, "name must be a string\x00");
+    if (python_c.PyArg_ParseTuple(args, "O\x00", &name) < 0) {
         return null;
     }
 
@@ -41,7 +36,7 @@ pub fn task_set_name(self: ?*constructors.PythonTaskObject, args: ?PyObject) cal
     mutex.lock();
     defer mutex.unlock();
 
-    instance.name = python_c.py_newref(name.?);
+    instance.name = python_c.PyObject_Str(name.?) orelse return null;
     return python_c.get_py_none();
 }
 

@@ -88,7 +88,7 @@ const PythonTaskMembers: []const python_c.PyMemberDef = &[_]python_c.PyMemberDef
     python_c.PyMemberDef{
         .name = "_exception\x00",
         .type = python_c.Py_T_OBJECT_EX,
-        .offset = @offsetOf(constructors.PythonTaskObject, "coro"),
+        .offset = @offsetOf(Future.constructors.PythonFutureObject, "exception"),
         .doc = null,
     },
     python_c.PyMemberDef{
@@ -109,4 +109,5 @@ pub var PythonTaskType = python_c.PyTypeObject{
     .tp_clear = @ptrCast(&constructors.task_clear),
     .tp_dealloc = @ptrCast(&constructors.task_dealloc),
     .tp_methods = @constCast(PythonTaskMethods.ptr),
+    .tp_members = @constCast(PythonTaskMembers.ptr)
 };

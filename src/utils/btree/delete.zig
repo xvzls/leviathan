@@ -57,7 +57,6 @@ inline fn delete_from_right(node: *?*Node, key: *u64, value: **anyopaque) *Node 
     return node_with_smaller_value;
 }
 
-// TODO: Cuando eliminas el elemento mayor o menor tambien tiene hijos en el otro lado, recuerda pasarlos
 inline fn delete_func(
     allocator: std.mem.Allocator, node: *?*Node, func: anytype,
     keys: []u64, values: []*anyopaque, index: usize

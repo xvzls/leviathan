@@ -22,7 +22,12 @@ inline fn z_future_add_done_callback(self: *PythonFutureObject, args: PyObject) 
 
     const py_loop = self.py_loop.?;
     if (context) |py_ctx| {
-        python_c.py_incref(py_ctx);
+        if (python_c.Py_IsNone(py_ctx) != 0) {
+            context = python_c.PyObject_CallNoArgs(py_loop.contextvars_copy.?)
+                orelse return error.PythonError;
+        }else{
+            python_c.py_incref(py_ctx);
+        }
     }else {
         context = python_c.PyObject_CallNoArgs(py_loop.contextvars_copy.?) orelse return error.PythonError;
     }
@@ -50,7 +55,6 @@ inline fn z_future_add_done_callback(self: *PythonFutureObject, args: PyObject) 
         .PythonFuture = .{
             .args = callback_args,
             .exception_handler = py_loop.exception_handler.?,
-            // .contextvars = context.?,
             .py_callback = contextvars_run_func,
         }
     };

@@ -22,16 +22,12 @@ class _LoopHelpers:
 
 
 class Loop(_LoopSingleThread, _LoopHelpers):
-	_thread_safe = False
-
 	def __init__(self, ready_tasks_queue_min_bytes_capacity: int = 10 ** 6) -> None:
 		_LoopHelpers.__init__(self)
 		_LoopSingleThread.__init__(self, ready_tasks_queue_min_bytes_capacity, self._call_exception_handler)
 
 
 class ThreadSafeLoop(_Loop, _LoopHelpers):
-	_thread_safe = True
-
 	def __init__(self, ready_tasks_queue_min_bytes_capacity: int = 10 ** 6) -> None:
 		_LoopHelpers.__init__(self)
 		_Loop.__init__(self, ready_tasks_queue_min_bytes_capacity, self._call_exception_handler)

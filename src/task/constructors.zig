@@ -141,6 +141,11 @@ inline fn z_task_init(
         return error.PythonError;
     }
 
+    if (python_c.PyCoro_CheckExact(coro.?) == 0) {
+        utils.put_python_runtime_error_message("Task coro must be a coroutine\x00");
+        return error.PythonError;
+    }
+
     const coro_send: PyObject = python_c.PyObject_GetAttrString(coro.?, "send\x00") orelse return error.PythonError;
     errdefer python_c.py_decref(coro_send);
 
@@ -153,7 +158,12 @@ inline fn z_task_init(
     }
 
     if (context) |py_ctx| {
-        self.py_context = python_c.py_newref(py_ctx);
+        if (python_c.Py_IsNone(py_ctx) != 0) {
+            self.py_context = python_c.PyObject_CallNoArgs(leviathan_loop.contextvars_copy.?)
+                orelse return error.PythonError;
+        }else{
+            self.py_context = python_c.py_newref(py_ctx);
+        }
     }else{
         self.py_context = python_c.PyObject_CallNoArgs(leviathan_loop.contextvars_copy.?) orelse return error.PythonError;
     }

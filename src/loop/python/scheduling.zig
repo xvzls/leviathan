@@ -20,7 +20,7 @@ inline fn get_py_context(knames: ?PyObject, args: []?PyObject, loop: *PythonLoop
         }else if (kwargs_len == 1) {
             const key = python_c.PyTuple_GetItem(kwargs, @intCast(0)) orelse return error.PythonError;
             if (python_c.PyUnicode_CompareWithASCIIString(key, "context\x00") == 0) {
-                context = python_c.py_newref(args[args.len].?);
+                context = args[args.len].?;
             }else{
                 utils.put_python_runtime_error_message("Invalid keyword argument\x00");
                 return error.PythonError;
@@ -32,10 +32,12 @@ inline fn get_py_context(knames: ?PyObject, args: []?PyObject, loop: *PythonLoop
     }
 
     if (context) |v| {
-        return v;
-    }else{
-        return python_c.PyObject_CallNoArgs(loop.contextvars_copy.?) orelse return error.PythonError;
+        if (python_c.Py_IsNone(v) == 0) {
+            return python_c.py_newref(v);
+        }
     }
+
+    return python_c.PyObject_CallNoArgs(loop.contextvars_copy.?) orelse error.PythonError;
 }
 
 inline fn get_callback_info(allocator: std.mem.Allocator, args: []?PyObject) ![]PyObject {
