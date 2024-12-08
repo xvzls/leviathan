@@ -1,8 +1,8 @@
 const python_c = @import("python_c");
 
 pub const constructors = @import("constructors.zig");
-const result = @import("result.zig");
-const cancel = @import("cancel.zig");
+pub const result = @import("result.zig");
+pub const cancel = @import("cancel.zig");
 const callbacks = @import("callbacks.zig");
 
 const PythonFutureMethods: []const python_c.PyMethodDef = &[_]python_c.PyMethodDef{

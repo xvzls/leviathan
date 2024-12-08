@@ -3,10 +3,31 @@ const std = @import("std");
 const python_c = @import("python_c");
 const PyObject = *python_c.PyObject;
 
+const Future = @import("../main.zig");
 const constructors = @import("constructors.zig");
 const PythonFutureObject = constructors.PythonFutureObject;
 
 const utils = @import("../../utils/utils.zig");
+
+pub inline fn future_fast_cancel(instance: *PythonFutureObject, obj: *Future, cancel_msg_py_object: ?PyObject) bool {
+    if (cancel_msg_py_object) |pyobj| {
+        if (python_c.PyUnicode_Check(pyobj) == 0) {
+            python_c.PyErr_SetString(python_c.PyExc_TypeError.?, "Cancel message must be a string\x00");
+            return null;
+        }
+
+        instance.cancel_msg_py_object = python_c.py_newref(pyobj);
+    }
+
+    obj.call_done_callbacks(.CANCELED) catch |err| {
+        const err_trace = @errorReturnTrace();
+        utils.print_error_traces(err_trace, err);
+        utils.put_python_runtime_error_message(@errorName(err));
+        return false;
+    };
+
+    return true;
+}
 
 pub fn future_cancel(self: ?*PythonFutureObject, args: ?PyObject, kwargs: ?PyObject) callconv(.C) ?PyObject {
     const instance = self.?;
@@ -35,21 +56,9 @@ pub fn future_cancel(self: ?*PythonFutureObject, args: ?PyObject, kwargs: ?PyObj
         return null;
     }
 
-    if (cancel_msg_py_object) |pyobj| {
-        if (python_c.PyUnicode_Check(pyobj) == 0) {
-            python_c.PyErr_SetString(python_c.PyExc_TypeError.?, "Cancel message must be a string\x00");
-            return null;
-        }
-
-        instance.cancel_msg_py_object = python_c.py_newref(pyobj);
-    }
-
-    obj.call_done_callbacks(.CANCELED) catch |err| {
-        const err_trace = @errorReturnTrace();
-        utils.print_error_traces(err_trace, err);
-        utils.put_python_runtime_error_message(@errorName(err));
+    if (!future_fast_cancel(instance, obj, cancel_msg_py_object)) {
         return null;
-    };
+    }
 
     return python_c.get_py_true();
 }

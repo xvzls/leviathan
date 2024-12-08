@@ -2,9 +2,11 @@ const Future = @import("../future/main.zig");
 
 const python_c = @import("python_c");
 
-const constructors = @import("constructors.zig");
+pub const constructors = @import("constructors.zig");
 const task_utils = @import("utils.zig");
-const cancel = @import("cancel.zig");
+pub const cancel = @import("cancel.zig");
+
+pub usingnamespace @import("callbacks.zig");
 
 const PythonTaskMethods: []const python_c.PyMethodDef = &[_]python_c.PyMethodDef{
     python_c.PyMethodDef{

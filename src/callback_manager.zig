@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const Future = @import("future/main.zig");
+const Task = @import("task/main.zig");
 const Handle = @import("handle.zig");
 
 const LinkedList = @import("utils/linked_list.zig");
@@ -12,7 +13,7 @@ pub const ExecuteCallbacksReturn = enum {
 };
 
 pub const CallbackType = enum {
-    ZigGeneric, PythonGeneric, PythonFutureCallbacksSet, PythonFuture
+    ZigGeneric, PythonGeneric, PythonFutureCallbacksSet, PythonFuture, PythonTask
 };
 
 pub const ZigGenericCallback = *const fn (?*anyopaque, status: ExecuteCallbacksReturn) ExecuteCallbacksReturn;
@@ -26,7 +27,8 @@ pub const Callback = union(CallbackType) {
     ZigGeneric: ZigGenericCallbackData,
     PythonGeneric: Handle.GenericCallbackData,
     PythonFutureCallbacksSet: Future.FutureCallbacksSetData,
-    PythonFuture: Future.FutureCallbackData
+    PythonFuture: Future.FutureCallbackData,
+    PythonTask: Task.TaskCallbackData
 };
 
 pub const CallbacksSet = struct {
