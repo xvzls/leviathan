@@ -94,6 +94,12 @@ const PythonTaskMembers: []const python_c.PyMemberDef = &[_]python_c.PyMemberDef
         .doc = null,
     },
     python_c.PyMemberDef{
+        .name = "_fut_waiter\x00",
+        .type = python_c.Py_T_OBJECT_EX,
+        .offset = @offsetOf(Future.constructors.PythonFutureObject, "fut_waiter"),
+        .doc = null,
+    },
+    python_c.PyMemberDef{
         .name = null, .flags = 0, .offset = 0, .doc = null
     }
 };

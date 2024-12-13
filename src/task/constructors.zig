@@ -19,7 +19,9 @@ pub const PythonTaskObject = extern struct {
     coro_throw: ?PyObject,
 
     cancel_requests: usize,
-    must_cancel: bool
+    must_cancel: bool,
+
+    fut_waiter: ?PyObject
 };
 
 inline fn z_task_new(
@@ -44,6 +46,7 @@ inline fn z_task_new(
     instance.coro = null;
     instance.name = null;
 
+    instance.fut_waiter = python_c.get_py_none();
     return instance;
 }
 
@@ -75,6 +78,8 @@ pub fn task_clear(self: ?*PythonTaskObject) callconv(.C) c_int {
     python_c.py_decref_and_set_null(&py_task.coro);
     python_c.py_decref_and_set_null(&py_task.coro_send);
     python_c.py_decref_and_set_null(&py_task.coro_throw);
+
+    python_c.py_decref_and_set_null(&py_task.fut_waiter);
 
     return 0;
 }
