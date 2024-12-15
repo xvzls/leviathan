@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const python_c = @import("python_c");
+
 const Future = @import("future/main.zig");
 const Task = @import("task/main.zig");
 const Handle = @import("handle.zig");
@@ -113,6 +115,7 @@ pub inline fn run_callback(
                     allocator, data, status
                 ),
                 .PythonFuture => |data| Future.callback_for_python_future_callbacks(data),
+                .PythonTask => |data| Task.step_run_and_handle_result_task(data.task, data.exc_value),
             };
         },
         else => {
@@ -127,6 +130,7 @@ pub inline fn run_callback(
                     );
                 },
                 .PythonFuture => |data| Future.release_python_future_callback(data),
+                .PythonTask => |data| Task.release_python_task_callback(data.task, data.exc_value),
             }
             return .Continue;
         }

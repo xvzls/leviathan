@@ -29,7 +29,7 @@ pub inline fn release_python_generic_callback(allocator: std.mem.Allocator, data
     python_c.py_decref(@ptrCast(data.py_handle));
 }
 
-pub inline fn callback_for_python_generic_callbacks(
+pub fn callback_for_python_generic_callbacks(
     allocator: std.mem.Allocator, data: GenericCallbackData
 ) CallbackManager.ExecuteCallbacksReturn {
     defer release_python_generic_callback(allocator, data);

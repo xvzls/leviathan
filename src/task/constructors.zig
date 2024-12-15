@@ -3,10 +3,14 @@ const PyObject = *python_c.PyObject;
 
 const utils = @import("../utils/utils.zig");
 
+const CallbackManager = @import("../callback_manager.zig");
 const Future = @import("../future/main.zig");
 const Loop = @import("../loop/main.zig");
 
+const Task = @import("main.zig");
+
 const std = @import("std");
+const builtin = @import("builtin");
 
 pub const PythonTaskObject = extern struct {
     fut: Future.constructors.PythonFutureObject,
@@ -172,18 +176,41 @@ inline fn z_task_init(
         self.py_context = python_c.PyObject_CallNoArgs(leviathan_loop.contextvars_copy.?) orelse return error.PythonError;
     }
 
-    self.fut.future_obj = try Future.init(leviathan_loop.loop_obj.?.allocator, leviathan_loop.loop_obj.?);
-    self.fut.future_obj.?.py_future = @ptrCast(self);
+    const loop = leviathan_loop.loop_obj.?;
+
+    const future_obj = try Future.init(loop.allocator, leviathan_loop.loop_obj.?);
+    future_obj.py_future = @ptrCast(self);
+    self.fut.future_obj = future_obj;
+    errdefer self.fut.future_obj.?.release();
+
     self.fut.py_loop = python_c.py_newref(leviathan_loop);
+    errdefer python_c.py_decref_and_set_null(@ptrCast(&self.fut.py_loop));
 
     self.fut.asyncio_module = leviathan_loop.asyncio_module.?;
     self.fut.invalid_state_exc = leviathan_loop.invalid_state_exc.?;
     self.fut.cancelled_error_exc = leviathan_loop.cancelled_error_exc.?;
 
     self.coro = python_c.py_newref(coro.?);
+    errdefer python_c.py_decref_and_set_null(&self.coro);
+
     self.coro_send = coro_send;
     self.coro_throw = coro_throw;
+
     self.name = python_c.py_newref(name.?);
+    errdefer python_c.py_decref_and_set_null(&self.name);
+    
+    const callback: CallbackManager.Callback = .{
+        .PythonTask = .{
+            .task = self
+        }
+    };
+
+    if (builtin.single_threaded) {
+        try loop.call_soon(callback);
+    }else{
+        try loop.call_soon_threadsafe(callback);
+    }
+    python_c.py_incref(@ptrCast(self));
 
     return 0;
 }

@@ -30,7 +30,7 @@ pub inline fn release_python_future_callback(data: FutureCallbackData) void {
     if (data.dec_future) python_c.py_decref(data.args[1]);
 }
 
-pub inline fn callback_for_python_future_callbacks(data: FutureCallbackData) CallbackManager.ExecuteCallbacksReturn {
+pub fn callback_for_python_future_callbacks(data: FutureCallbackData) CallbackManager.ExecuteCallbacksReturn {
     defer release_python_future_callback(data);
     if (!data.can_execute) return .Continue;
 
@@ -60,7 +60,7 @@ pub inline fn callback_for_python_future_callbacks(data: FutureCallbackData) Cal
     return .Continue;
 }
 
-pub inline fn callback_for_python_future_set_callbacks(
+pub fn callback_for_python_future_set_callbacks(
     allocator: std.mem.Allocator, data: FutureCallbacksSetData, status: CallbackManager.ExecuteCallbacksReturn
 ) CallbackManager.ExecuteCallbacksReturn {
     defer python_c.py_decref(data.future);

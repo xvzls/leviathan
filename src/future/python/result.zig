@@ -10,8 +10,7 @@ const utils = @import("../../utils/utils.zig");
 
 inline fn raise_cancel_exception(self: *PythonFutureObject) void {
     if (self.cancel_msg_py_object) |cancel_msg_py_object| {
-        const msg = python_c.PyUnicode_AsUTF8(cancel_msg_py_object);
-        python_c.PyErr_SetString(self.cancelled_error_exc.?, msg);
+        python_c.PyErr_SetObject(self.cancelled_error_exc.?, cancel_msg_py_object);
     }else{
         python_c.PyErr_SetRaisedException(self.cancelled_error_exc.?);
     }
@@ -83,10 +82,10 @@ pub fn future_exception(self: ?*PythonFutureObject, _: ?PyObject) callconv(.C) ?
 }
 
 pub inline fn future_fast_set_exception(self: *PythonFutureObject, obj: *Future, exception: PyObject) !i8 {
-    self.exception = python_c.py_newref(exception.?);
+    self.exception = python_c.py_newref(exception);
     errdefer python_c.py_decref_and_set_null(&self.exception);
 
-    self.exception_tb = python_c.PyException_GetTraceback(exception.?);
+    self.exception_tb = python_c.PyException_GetTraceback(exception);
     errdefer python_c.py_decref_and_set_null(&self.exception_tb);
 
     try obj.call_done_callbacks(.FINISHED);
@@ -120,13 +119,11 @@ pub fn future_set_exception(self: ?*PythonFutureObject, args: ?PyObject) callcon
     return utils.execute_zig_function(z_future_set_exception, .{self.?, args});
 }
 
-pub inline fn future_fast_set_result(obj: *Future, result: PyObject) !i8 {
-    obj.result = python_c.py_newref(result.?);
+pub inline fn future_fast_set_result(obj: *Future, result: PyObject) !void {
+    obj.result = python_c.py_newref(result);
     errdefer python_c.py_decref_and_set_null(@alignCast(@ptrCast(&obj.result)));
 
     try obj.call_done_callbacks(.FINISHED);
-
-    return 0;
 }
 
 inline fn z_future_set_result(self: *PythonFutureObject, args: ?PyObject) !PyObject {
@@ -148,7 +145,7 @@ inline fn z_future_set_result(self: *PythonFutureObject, args: ?PyObject) !PyObj
         return error.PythonError;
     }
 
-    _ = try future_fast_set_result(self, obj, result.?);
+    try future_fast_set_result(obj, result.?);
     return python_c.get_py_none();
 }
 

@@ -13,7 +13,7 @@ pub inline fn future_fast_cancel(instance: *PythonFutureObject, obj: *Future, ca
     if (cancel_msg_py_object) |pyobj| {
         if (python_c.PyUnicode_Check(pyobj) == 0) {
             python_c.PyErr_SetString(python_c.PyExc_TypeError.?, "Cancel message must be a string\x00");
-            return null;
+            return false;
         }
 
         instance.cancel_msg_py_object = python_c.py_newref(pyobj);
