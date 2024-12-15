@@ -336,7 +336,6 @@ pub inline fn release_python_task_callback(task: *Task.constructors.PythonTaskOb
 pub fn step_run_and_handle_result(
     task: *Task.constructors.PythonTaskObject, exc_value: ?PyObject
 ) CallbackManager.ExecuteCallbacksReturn {
-    std.log.info("Step run and handle result for task {d}", .{ @intFromPtr(task) });
     var exception_value: ?PyObject = exc_value;
     defer release_python_task_callback(task, exception_value);
 
