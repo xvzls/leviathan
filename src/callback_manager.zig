@@ -115,7 +115,7 @@ pub inline fn run_callback(
                     allocator, data, status
                 ),
                 .PythonFuture => |data| Future.callback_for_python_future_callbacks(data),
-                .PythonTask => |data| Task.step_run_and_handle_result_task(data.task, data.exc_value),
+                .PythonTask => |data| Task.step_run_and_handle_result(data.task, data.exc_value),
             };
         },
         else => {

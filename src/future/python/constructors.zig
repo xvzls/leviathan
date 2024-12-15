@@ -137,11 +137,11 @@ pub fn future_get_loop(self: ?*PythonFutureObject) callconv(.C) ?*Loop.construct
     return python_c.py_newref(self.?.py_loop);
 }
 
-pub fn future_iter(self: ?*PythonFutureObject) callconv(.C) ?*python_c.PyObject {
+pub fn future_iter(self: ?*PythonFutureObject) callconv(.C) ?PyObject {
     return @ptrCast(python_c.py_newref(self.?));
 }
 
-pub fn future_iternext(self: ?*PythonFutureObject) callconv(.C) ?*python_c.PyObject {
+pub fn future_iternext(self: ?*PythonFutureObject) callconv(.C) ?PyObject {
     const instance = self.?;
 
     const obj = instance.future_obj.?;
@@ -157,6 +157,6 @@ pub fn future_iternext(self: ?*PythonFutureObject) callconv(.C) ?*python_c.PyObj
         return null;
     }
 
-    // TODO: Return future object instead of None
-    return python_c.get_py_none();
+    instance.blocking = 1;
+    return @ptrCast(instance);
 }

@@ -16,6 +16,7 @@ pub const PythonTaskObject = extern struct {
     fut: Future.constructors.PythonFutureObject,
 
     py_context: ?PyObject,
+    run_context: ?PyObject,
     name: ?PyObject,
 
     coro: ?PyObject,
@@ -41,7 +42,7 @@ inline fn z_task_new(
 
     instance.fut.future_obj = null;
     instance.fut.exception_tb = null;
-    instance.fut.exception = python_c.get_py_none();
+    instance.fut.exception = null;
 
     instance.fut.cancel_msg_py_object = null;
     instance.fut.blocking = 0;
@@ -50,7 +51,7 @@ inline fn z_task_new(
     instance.coro = null;
     instance.name = null;
 
-    instance.fut_waiter = python_c.get_py_none();
+    instance.fut_waiter = null;
     return instance;
 }
 
@@ -77,6 +78,7 @@ pub fn task_clear(self: ?*PythonTaskObject) callconv(.C) c_int {
     python_c.py_decref_and_set_null(&py_task.fut.cancel_msg_py_object);
 
     python_c.py_decref_and_set_null(&py_task.py_context);
+    python_c.py_decref_and_set_null(&py_task.run_context);
     python_c.py_decref_and_set_null(&py_task.name);
 
     python_c.py_decref_and_set_null(&py_task.coro);
@@ -175,6 +177,10 @@ inline fn z_task_init(
     }else{
         self.py_context = python_c.PyObject_CallNoArgs(leviathan_loop.contextvars_copy.?) orelse return error.PythonError;
     }
+    errdefer python_c.py_decref_and_set_null(&self.py_context);
+
+    self.run_context = python_c.PyObject_GetAttrString(self.py_context.?, "run\x00") orelse return error.PythonError;
+    errdefer python_c.py_decref_and_set_null(&self.run_context);
 
     const loop = leviathan_loop.loop_obj.?;
 
@@ -199,6 +205,10 @@ inline fn z_task_init(
     self.name = python_c.py_newref(name.?);
     errdefer python_c.py_decref_and_set_null(&self.name);
     
+    const mutex = &future_obj.mutex;
+    mutex.lock();
+    defer mutex.unlock();
+
     const callback: CallbackManager.Callback = .{
         .PythonTask = .{
             .task = self

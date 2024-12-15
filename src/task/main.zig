@@ -86,18 +86,21 @@ const PythonTaskMembers: []const python_c.PyMemberDef = &[_]python_c.PyMemberDef
         .type = python_c.Py_T_OBJECT_EX,
         .offset = @offsetOf(constructors.PythonTaskObject, "coro"),
         .doc = null,
+        .flags = python_c.Py_READONLY
     },
     python_c.PyMemberDef{
         .name = "_exception\x00",
-        .type = python_c.Py_T_OBJECT_EX,
+        .type = python_c._Py_T_OBJECT,
         .offset = @offsetOf(Future.constructors.PythonFutureObject, "exception"),
         .doc = null,
+        .flags = python_c.Py_READONLY
     },
     python_c.PyMemberDef{
         .name = "_fut_waiter\x00",
-        .type = python_c.Py_T_OBJECT_EX,
+        .type = python_c._Py_T_OBJECT,
         .offset = @offsetOf(constructors.PythonTaskObject, "fut_waiter"),
         .doc = null,
+        .flags = python_c.Py_READONLY
     },
     python_c.PyMemberDef{
         .name = null, .flags = 0, .offset = 0, .doc = null
