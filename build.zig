@@ -1,5 +1,38 @@
 const std = @import("std");
 
+fn create_build_step(
+    b: *std.Build,
+    name: []const u8,
+    path: []const u8,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    single_threaded: bool,
+    modules_name: []const []const u8,
+    modules: []const *std.Build.Module,
+    comptime emit_bin: bool,
+    step: *std.Build.Step
+) void {
+    const lib = b.addSharedLibrary(.{
+        .name = name,
+        .optimize = optimize,
+        .target = target,
+        .root_source_file = b.path(path),
+        .single_threaded = single_threaded,
+    });
+
+    lib.linkLibC();
+    for (modules_name, modules) |module_name, module| {
+        lib.root_module.addImport(module_name, module);
+    }
+
+    if (emit_bin) {
+        const compile_python_lib = b.addInstallArtifact(lib, .{});
+        step.dependOn(&compile_python_lib.step);
+    }else{
+        step.dependOn(&lib.step);
+    }
+}
+
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -29,33 +62,30 @@ pub fn build(b: *std.Build) void {
     leviathan_module.addImport("python_c", python_c_module);
     leviathan_module.addImport("jdz_allocator", jdz_allocator_module);
 
-    const python_lib = b.addSharedLibrary(.{
-        .name = "leviathan",
-        .optimize = optimize,
-        .target = target,
-        .root_source_file = b.path("src/lib.zig")
-    });
+    const modules_name = .{ "leviathan", "python_c", "jdz_allocator" };
+    const modules = .{ leviathan_module, python_c_module, jdz_allocator_module };
+    const install_step = b.getInstallStep();
 
-    const python_lib_single_thread = b.addSharedLibrary(.{
-        .name = "leviathan_single_thread",
-        .optimize = optimize,
-        .target = target,
-        .root_source_file = b.path("src/lib.zig"),
-        .single_threaded = true
-    });
+    create_build_step(
+        b, "leviathan", "src/lib.zig", target, optimize, false,
+        &modules_name, &modules, true, install_step
+    );
 
-    const python_libs = .{
-        python_lib_single_thread, python_lib
-    };
-    inline for (&python_libs) |lib| {
-        lib.linkLibC();
-        lib.root_module.addImport("leviathan", leviathan_module);
-        lib.root_module.addImport("python_c", python_c_module);
-        lib.root_module.addImport("jdz_allocator", jdz_allocator_module);
+    create_build_step(
+        b, "leviathan_single_thread", "src/lib.zig", target, optimize, true,
+        &modules_name, &modules, true, install_step
+    );
 
-        const compile_python_lib = b.addInstallArtifact(lib, .{});
-        b.getInstallStep().dependOn(&compile_python_lib.step);
-    }
+    const check_step = b.step("check", "Run checking for ZLS");
+    create_build_step(
+        b, "leviathan", "src/lib.zig", target, optimize, false,
+        &modules_name, &modules, false, check_step
+    );
+
+    create_build_step(
+        b, "leviathan_single_thread", "src/lib.zig", target, optimize, true,
+        &modules_name, &modules, false, check_step
+    );
 
     const lib_unit_tests = b.addTest(.{
         .root_source_file = b.path("tests/main.zig"),
@@ -69,4 +99,5 @@ pub fn build(b: *std.Build) void {
 
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_lib_unit_tests.step);
+
 }

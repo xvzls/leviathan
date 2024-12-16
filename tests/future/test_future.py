@@ -283,6 +283,7 @@ def test_adding_callbacks_after_setting_result(
 	finally:
 		loop.close()
 
+
 @pytest.mark.parametrize("fut_obj, loop_obj", [
 	(Future, Loop),
 	(ThreadSafeFuture, ThreadSafeLoop),
