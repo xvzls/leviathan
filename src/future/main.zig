@@ -21,9 +21,9 @@ mutex: std.Thread.Mutex,
 callbacks_arena: std.heap.ArenaAllocator,
 callbacks_arena_allocator: std.mem.Allocator = undefined,
 callbacks_queue: CallbackManager.CallbacksSetsQueue = undefined,
-loop: ?*Loop,
+loop: ?*Loop = null,
 
-py_future: ?*Future.constructors.PythonFutureObject = null,
+py_future: ?Future.constructors.PythonFutureObject = null,
 
 
 pub fn init(allocator: std.mem.Allocator, loop: *Loop) !*Future {

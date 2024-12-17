@@ -60,7 +60,7 @@ pub fn callback_for_python_future_callbacks(data: FutureCallbackData) CallbackMa
     return .Continue;
 }
 
-pub fn callback_for_python_future_set_callbacks(
+pub inline fn callback_for_python_future_set_callbacks(
     allocator: std.mem.Allocator, data: FutureCallbacksSetData, status: CallbackManager.ExecuteCallbacksReturn
 ) CallbackManager.ExecuteCallbacksReturn {
     defer python_c.py_decref(data.future);

@@ -282,7 +282,7 @@ inline fn failed_execution(task: *Task.constructors.PythonTaskObject) CallbackMa
 
     const fut: *Future.constructors.PythonFutureObject = &task.fut;
     const future_obj = fut.future_obj.?;
-    const exception = python_c.PyErr_GetRaisedException() orelse return .Exception;
+    const exception: PyObject = python_c.PyErr_GetRaisedException() orelse return .Exception;
     defer python_c.py_decref(exception);
 
     if (exc_match(exception, python_c.PyExc_StopIteration) > 0) {
@@ -301,7 +301,8 @@ inline fn failed_execution(task: *Task.constructors.PythonTaskObject) CallbackMa
         return .Continue;
     }
 
-    const cancelled_error = task.fut.py_loop.?.cancelled_error_exc.?;
+    const py_loop = task.fut.py_loop.?;
+    const cancelled_error = py_loop.cancelled_error_exc.?;
     if (exc_match(exception, cancelled_error) > 0) {
         if (!Future.cancel.future_fast_cancel(fut, future_obj, null)) {
             return .Exception;
@@ -320,7 +321,7 @@ inline fn failed_execution(task: *Task.constructors.PythonTaskObject) CallbackMa
         return .Exception;
     }
     
-    const exception_handler = task.fut.py_loop.?.exception_handler;
+    const exception_handler = py_loop.exception_handler.?;
     const exc_handler_ret: PyObject = python_c.PyObject_CallOneArg(exception_handler, exception)
         orelse return .Exception;
     python_c.py_decref(exc_handler_ret);
@@ -348,7 +349,7 @@ pub fn step_run_and_handle_result(
         utils.put_python_runtime_error_message(
             "Task already finished\x00"
         );
-        return .Exception;
+        return failed_execution(task);
     }
 
     if (task.must_cancel) {
