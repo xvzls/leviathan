@@ -11,6 +11,41 @@ const PythonFutureObject = Future.PythonFutureObject;
 
 const std = @import("std");
 
+pub inline fn init_fields(self: *PythonFutureObject) void {
+    const future_data = utils.get_data_ptr(Future, self);
+    future_data.released = true;
+
+    self.asyncio_module = null;
+    self.invalid_state_exc = null;
+    self.cancelled_error_exc = null;
+
+    self.exception_tb = null;
+    self.exception = null;
+
+    self.cancel_msg_py_object = null;
+    self.blocking = 0;
+}
+
+pub inline fn create_future(self: *PythonFutureObject, leviathan_loop: *Loop.PythonLoopObject) void {
+    const loop_data = utils.get_data_ptr(Loop, leviathan_loop);
+    const future_data = utils.get_data_ptr(Future, self);
+    future_data.init(loop_data);
+    self.py_loop = python_c.py_newref(leviathan_loop);
+
+    self.asyncio_module = leviathan_loop.asyncio_module.?;
+    self.invalid_state_exc = leviathan_loop.invalid_state_exc.?;
+    self.cancelled_error_exc = leviathan_loop.cancelled_error_exc.?;
+}
+
+pub inline fn fast_new_future(leviathan_loop: *Loop.PythonLoopObject) !*PythonFutureObject {
+    const instance: *PythonFutureObject = @ptrCast(
+        Future.PythonFutureType.tp_alloc.?(&Future.PythonFutureType, 0) orelse return error.PythonError
+    );
+
+    init_fields(instance);
+    create_future(instance, leviathan_loop);
+    return instance;
+}
 
 inline fn z_future_new(
     @"type": *python_c.PyTypeObject, _: ?PyObject,
@@ -18,19 +53,7 @@ inline fn z_future_new(
 ) !*PythonFutureObject {
     const instance: *PythonFutureObject = @ptrCast(@"type".tp_alloc.?(@"type", 0) orelse return error.PythonError);
     errdefer @"type".tp_free.?(instance);
-
-    const future_data = utils.get_data_ptr(Future, instance);
-    future_data.released = true;
-
-    instance.asyncio_module = null;
-    instance.invalid_state_exc = null;
-    instance.cancelled_error_exc = null;
-
-    instance.exception_tb = null;
-    instance.exception = null;
-
-    instance.cancel_msg_py_object = null;
-    instance.blocking = 0;
+    init_fields(instance);
     return instance;
 }
 
@@ -105,15 +128,7 @@ inline fn z_future_init(
         return error.PythonError;
     }
 
-    const loop_data = utils.get_data_ptr(Loop, leviathan_loop);
-    const future_data = utils.get_data_ptr(Future, self);
-    future_data.init(loop_data);
-    self.py_loop = python_c.py_newref(leviathan_loop);
-
-    self.asyncio_module = leviathan_loop.asyncio_module.?;
-    self.invalid_state_exc = leviathan_loop.invalid_state_exc.?;
-    self.cancelled_error_exc = leviathan_loop.cancelled_error_exc.?;
-
+    create_future(self, leviathan_loop);
     return 0;
 }
 

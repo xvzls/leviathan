@@ -21,18 +21,7 @@ inline fn z_task_new(
     const instance: *PythonTaskObject = @ptrCast(@"type".tp_alloc.?(@"type", 0) orelse return error.PythonError);
     errdefer @"type".tp_free.?(instance);
 
-    const fut: *Future.PythonFutureObject = &instance.fut;
-    fut.asyncio_module = null;
-    fut.invalid_state_exc = null;
-    fut.cancelled_error_exc = null;
-
-    const future_data = utils.get_data_ptr(Future, fut);
-    future_data.released = true;
-    fut.exception_tb = null;
-    fut.exception = null;
-
-    fut.cancel_msg_py_object = null;
-    fut.blocking = 0;
+    Future.constructors.init_fields(&instance.fut);
 
     instance.py_context = null;
     instance.coro = null;
@@ -171,17 +160,11 @@ inline fn z_task_init(
     self.run_context = python_c.PyObject_GetAttrString(self.py_context.?, "run\x00") orelse return error.PythonError;
     errdefer python_c.py_decref_and_set_null(&self.run_context);
 
+    Future.constructors.create_future(&self.fut, leviathan_loop);
+
     const loop_data = utils.get_data_ptr(Loop, leviathan_loop);
     const future_data = utils.get_data_ptr(Future, &self.fut);
-    future_data.init(loop_data);
     errdefer future_data.release();
-
-    self.fut.py_loop = python_c.py_newref(leviathan_loop);
-    errdefer python_c.py_decref_and_set_null(@ptrCast(&self.fut.py_loop));
-
-    self.fut.asyncio_module = leviathan_loop.asyncio_module.?;
-    self.fut.invalid_state_exc = leviathan_loop.invalid_state_exc.?;
-    self.fut.cancelled_error_exc = leviathan_loop.cancelled_error_exc.?;
 
     self.coro = python_c.py_newref(coro.?);
     errdefer python_c.py_decref_and_set_null(&self.coro);
