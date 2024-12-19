@@ -6,8 +6,7 @@ const utils = @import("../../utils/utils.zig");
 const Loop = @import("../main.zig");
 const Handle = @import("../../handle.zig");
 
-const constructors = @import("constructors.zig");
-const PythonLoopObject = constructors.PythonLoopObject;
+const PythonLoopObject = Loop.PythonLoopObject;
 
 const std = @import("std");
 
@@ -68,8 +67,11 @@ inline fn z_loop_call_soon(
     const context = try get_py_context(knames, args, self);
     errdefer python_c.py_decref(context);
 
-    const allocator = self.loop_obj.?.allocator;
+    const loop_data = utils.get_data_ptr(Loop, self);
+    const allocator = loop_data.allocator;
+
     const callback_info = try get_callback_info(allocator, args);
+
     errdefer {
         for (callback_info) |arg| {
             python_c.py_decref(@ptrCast(arg));
@@ -84,23 +86,21 @@ inline fn z_loop_call_soon(
     const py_handle: *Handle.PythonHandleObject = try Handle.fast_new_handle(context);
     errdefer python_c.py_decref(@ptrCast(py_handle));
 
-    const loop_obj = self.loop_obj.?;
-
-    const mutex = &loop_obj.mutex;
+    const mutex = &loop_data.mutex;
     mutex.lock();
     defer mutex.unlock();
 
-    if (loop_obj.closed) {
+    if (loop_data.closed) {
         utils.put_python_runtime_error_message("Loop is closed\x00");
         return error.PythonError;
     }
 
-    if (loop_obj.stopping) {
+    if (loop_data.stopping) {
         utils.put_python_runtime_error_message("Loop is stopping\x00");
         return error.PythonError;
     }
 
-    try loop_obj.call_soon(.{
+    try loop_data.call_soon(.{
         .PythonGeneric = .{
             .args = callback_info,
             .exception_handler = self.exception_handler.?,

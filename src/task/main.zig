@@ -1,6 +1,7 @@
 const Future = @import("../future/main.zig");
 
 const python_c = @import("python_c");
+const PyObject = *python_c.PyObject;
 
 pub const constructors = @import("constructors.zig");
 const task_utils = @import("utils.zig");
@@ -84,21 +85,21 @@ const PythonTaskMembers: []const python_c.PyMemberDef = &[_]python_c.PyMemberDef
     python_c.PyMemberDef{
         .name = "_coro\x00",
         .type = python_c.Py_T_OBJECT_EX,
-        .offset = @offsetOf(constructors.PythonTaskObject, "coro"),
+        .offset = @offsetOf(PythonTaskObject, "coro"),
         .doc = null,
         .flags = python_c.Py_READONLY
     },
     python_c.PyMemberDef{
         .name = "_exception\x00",
         .type = python_c._Py_T_OBJECT,
-        .offset = @offsetOf(Future.constructors.PythonFutureObject, "exception"),
+        .offset = @offsetOf(Future.PythonFutureObject, "exception"),
         .doc = null,
         .flags = python_c.Py_READONLY
     },
     python_c.PyMemberDef{
         .name = "_fut_waiter\x00",
         .type = python_c._Py_T_OBJECT,
-        .offset = @offsetOf(constructors.PythonTaskObject, "fut_waiter"),
+        .offset = @offsetOf(PythonTaskObject, "fut_waiter"),
         .doc = null,
         .flags = python_c.Py_READONLY
     },
@@ -107,11 +108,28 @@ const PythonTaskMembers: []const python_c.PyMemberDef = &[_]python_c.PyMemberDef
     }
 };
 
+pub const PythonTaskObject = extern struct {
+    fut: Future.PythonFutureObject,
+
+    py_context: ?PyObject,
+    run_context: ?PyObject,
+    name: ?PyObject,
+
+    coro: ?PyObject,
+    coro_send: ?PyObject,
+    coro_throw: ?PyObject,
+
+    cancel_requests: usize,
+    must_cancel: bool,
+
+    fut_waiter: ?PyObject
+};
+
 pub var PythonTaskType = python_c.PyTypeObject{
     .tp_name = "leviathan.Task\x00",
     .tp_doc = "Leviathan's task class\x00",
     .tp_base = &Future.PythonFutureType,
-    .tp_basicsize = @sizeOf(constructors.PythonTaskObject),
+    .tp_basicsize = @sizeOf(PythonTaskObject),
     .tp_itemsize = 0,
     .tp_flags = python_c.Py_TPFLAGS_DEFAULT | python_c.Py_TPFLAGS_BASETYPE | python_c.Py_TPFLAGS_HAVE_GC,
     .tp_new = &constructors.task_new,

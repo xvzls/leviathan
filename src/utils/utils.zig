@@ -19,15 +19,34 @@ pub inline fn put_python_runtime_error_message(msg: [:0]const u8) void {
     );
 }
 
-pub inline fn check_leviathan_python_object(object: anytype, magic: u64) bool {
-    if (object.magic != magic) {
-        python_c.PyErr_SetString(
-            python_c.PyExc_TypeError, "Invalid Leviathan's object\x00"
-        );
-        return true;
+pub inline fn get_data_ptr(comptime T: type, leviathan_pyobject: anytype) *T {
+    const type_info = @typeInfo(@TypeOf(leviathan_pyobject));
+    if (type_info != .Pointer) {
+        @compileError("leviathan_pyobject must be a pointer");
     }
 
-    return false;
+    if (type_info.Pointer.size != .One) {
+        @compileError("leviathan_pyobject must be a single pointer");
+    }
+
+    if (!@hasField(type_info.Pointer.child, "data")) {
+        @compileError("T must have a data field");
+    }
+
+    return @as(*T, @alignCast(@ptrCast(&@field(leviathan_pyobject, "data"))));
+}
+
+pub inline fn get_parent_ptr(comptime T: type, leviathan_object: anytype) *T {
+    const type_info = @typeInfo(@TypeOf(leviathan_object));
+    if (type_info != .Pointer) {
+        @compileError("leviathan_pyobject must be a pointer");
+    }
+
+    if (type_info.Pointer.size != .One) {
+        @compileError("leviathan_pyobject must be a single pointer");
+    }
+    
+    return @as(*T, @ptrFromInt(@intFromPtr(leviathan_object) - @offsetOf(T, "data")));
 }
 
 pub inline fn print_error_traces(

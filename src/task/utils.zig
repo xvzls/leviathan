@@ -2,28 +2,29 @@ const python_c = @import("python_c");
 const PyObject = *python_c.PyObject;
 
 const utils = @import("../utils/utils.zig");
-const constructors = @import("constructors.zig");
+const Future = @import("../future/main.zig");
+const Task = @import("main.zig");
 
 pub fn task_not_implemented_method(
-    _: ?*constructors.PythonTaskObject, _: ?PyObject, _: ?PyObject
+    _: ?*Task.PythonTaskObject, _: ?PyObject, _: ?PyObject
 ) callconv(.C) ?PyObject {
     python_c.PyErr_SetString(python_c.PyExc_NotImplementedError, "This method is not supported for tasks\x00");
     return null;
 }
 
-pub fn task_get_coro(self: ?*constructors.PythonTaskObject) callconv(.C) ?PyObject {
+pub fn task_get_coro(self: ?*Task.PythonTaskObject) callconv(.C) ?PyObject {
     return python_c.py_newref(self.?.coro);
 }
 
-pub fn task_get_context(self: ?*constructors.PythonTaskObject) callconv(.C) ?PyObject {
+pub fn task_get_context(self: ?*Task.PythonTaskObject) callconv(.C) ?PyObject {
     return python_c.py_newref(self.?.py_context);
 }
 
-pub fn task_get_name(self: ?*constructors.PythonTaskObject) callconv(.C) ?PyObject {
+pub fn task_get_name(self: ?*Task.PythonTaskObject) callconv(.C) ?PyObject {
     return python_c.py_newref(self.?.name);
 }
 
-pub fn task_set_name(self: ?*constructors.PythonTaskObject, args: ?PyObject) callconv(.C) ?PyObject {
+pub fn task_set_name(self: ?*Task.PythonTaskObject, args: ?PyObject) callconv(.C) ?PyObject {
     const instance = self.?;
 
     var name: ?PyObject = null;
@@ -31,8 +32,8 @@ pub fn task_set_name(self: ?*constructors.PythonTaskObject, args: ?PyObject) cal
         return null;
     }
 
-    const obj = instance.fut.future_obj.?;
-    const mutex = &obj.mutex;
+    const future_data = utils.get_data_ptr(Future, &instance.fut);
+    const mutex = &future_data.mutex;
     mutex.lock();
     defer mutex.unlock();
 
@@ -40,7 +41,7 @@ pub fn task_set_name(self: ?*constructors.PythonTaskObject, args: ?PyObject) cal
     return python_c.get_py_none();
 }
 
-pub fn task_get_stack(self: ?*constructors.PythonTaskObject, args: ?PyObject, kwargs: ?PyObject) callconv(.C) ?PyObject {
+pub fn task_get_stack(self: ?*Task.PythonTaskObject, args: ?PyObject, kwargs: ?PyObject) callconv(.C) ?PyObject {
     const instance = self.?;
 
     var kwlist: [2][*c]u8 = undefined;
@@ -69,7 +70,7 @@ pub fn task_get_stack(self: ?*constructors.PythonTaskObject, args: ?PyObject, kw
     return python_c.py_newref(stack);
 }
 
-pub fn task_print_stack(self: ?*constructors.PythonTaskObject, args: ?PyObject, kwargs: ?PyObject) callconv(.C) ?PyObject {
+pub fn task_print_stack(self: ?*Task.PythonTaskObject, args: ?PyObject, kwargs: ?PyObject) callconv(.C) ?PyObject {
     const instance = self.?;
 
     var kwlist: [3][*c]u8 = undefined;

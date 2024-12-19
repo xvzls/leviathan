@@ -13,7 +13,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 
 pub const TaskCallbackData = struct {
-    task: *Task.constructors.PythonTaskObject,
+    task: *Task.PythonTaskObject,
     exc_value: ?PyObject = null
 };
 
@@ -26,7 +26,7 @@ const LeviathanPyTaskWakeupMethod = python_c.PyMethodDef{
 };
 
 inline fn set_fut_waiter(
-    task: *Task.constructors.PythonTaskObject, future: PyObject
+    task: *Task.PythonTaskObject, future: PyObject
 ) void {
     if (task.fut_waiter) |_| {
         @panic("task.fut_waiter is not null");
@@ -37,7 +37,7 @@ inline fn set_fut_waiter(
 
 fn create_new_py_exception_and_add_event(
     loop: *Loop, allocator: std.mem.Allocator, comptime fmt: []const u8,
-    task: *Task.constructors.PythonTaskObject,
+    task: *Task.PythonTaskObject,
     result: PyObject
 ) !void {
     const task_repr: PyObject = python_c.PyObject_Repr(@ptrCast(task)) orelse return error.PythonError;
@@ -96,10 +96,10 @@ inline fn execute_zig_function(
 }
 
 inline fn cancel_future_object(
-    task: *Task.constructors.PythonTaskObject, future: anytype
+    task: *Task.PythonTaskObject, future: anytype
 ) CallbackManager.ExecuteCallbacksReturn {
-    if (@TypeOf(future) == *Future.constructors.PythonFutureObject) {
-        if (!Future.cancel.future_fast_cancel(future, future.future_obj.?, task.fut.cancel_msg_py_object)) {
+    if (@TypeOf(future) == *Future.PythonFutureObject) {
+        if (!Future.cancel.future_fast_cancel(future, task.fut.cancel_msg_py_object)) {
             return .Exception;
         }
     }else{
@@ -126,10 +126,10 @@ inline fn cancel_future_object(
 }
 
 inline fn handle_legacy_future_object(
-    task: *Task.constructors.PythonTaskObject, future: PyObject
+    task: *Task.PythonTaskObject, future: PyObject
 ) CallbackManager.ExecuteCallbacksReturn {
-    const loop = task.fut.py_loop.?.loop_obj.?;
-    const allocator = loop.allocator;
+    const loop_data = utils.get_data_ptr(Loop, task.fut.py_loop.?);
+    const allocator = loop_data.allocator;
 
     const asyncio_future_blocking: PyObject = python_c.PyObject_GetAttrString(
         future, "_asyncio_future_blocking\x00"
@@ -138,7 +138,7 @@ inline fn handle_legacy_future_object(
     if (python_c.PyBool_Check(asyncio_future_blocking) != 0) {
         return execute_zig_function(
             create_new_py_exception_and_add_event, .{
-                loop, allocator, "Task {s} got bad yield: {s}\x00",
+                loop_data, allocator, "Task {s} got bad yield: {s}\x00",
                 task, future
             }
         );
@@ -175,29 +175,29 @@ inline fn handle_legacy_future_object(
 
     return execute_zig_function(
         create_new_py_exception_and_add_event, .{
-            loop, allocator, "Yield was used instead of yield from in Task {s} with Future {s}\x00",
+            loop_data, allocator, "Yield was used instead of yield from in Task {s} with Future {s}\x00",
             task, future
         }
     );
 }
 
 inline fn handle_leviathan_future_object(
-    task: *Task.constructors.PythonTaskObject,
-    future: *Future.constructors.PythonFutureObject
+    task: *Task.PythonTaskObject,
+    future: *Future.PythonFutureObject
 ) CallbackManager.ExecuteCallbacksReturn {
-    const loop = task.fut.py_loop.?.loop_obj.?;
-    const allocator = loop.allocator;
+    const loop_data = utils.get_data_ptr(Loop, task.fut.py_loop.?);
+    const allocator = loop_data.allocator;
 
-    const future_obj = future.future_obj.?;
-    const mutex = &future_obj.mutex;
+    const future_data = utils.get_data_ptr(Future, future);
+    const mutex = &future_data.mutex;
 
     mutex.lock();
     defer mutex.unlock();
 
-    if (loop != future.py_loop.?.loop_obj.?) {
+    if (loop_data != utils.get_data_ptr(Loop, future.py_loop.?)) {
         return execute_zig_function(
             create_new_py_exception_and_add_event, .{
-                loop, allocator, "Task {s} and Future {s} are not in the same loop\x00",
+                loop_data, allocator, "Task {s} and Future {s} are not in the same loop\x00",
                 task, @as(PyObject, @ptrCast(future))
             }
         );
@@ -207,7 +207,7 @@ inline fn handle_leviathan_future_object(
         if (@intFromPtr(future) == @intFromPtr(task)) {
             return execute_zig_function(
                 create_new_py_exception_and_add_event, .{
-                    loop, allocator, "Task {s} and Future {s} are the same object. Task cannot await on itself\x00",
+                    loop_data, allocator, "Task {s} and Future {s} are the same object. Task cannot await on itself\x00",
                     task, @as(PyObject, @ptrCast(future))
                 }
             );
@@ -221,7 +221,7 @@ inline fn handle_leviathan_future_object(
         };
 
         const ret = execute_zig_function(
-            Future.add_done_callback, .{future_obj, callback}
+            Future.add_done_callback, .{future_data, callback}
         );
         if (ret == .Continue) {
             python_c.py_incref(@ptrCast(task));
@@ -239,19 +239,19 @@ inline fn handle_leviathan_future_object(
 
     return execute_zig_function(
         create_new_py_exception_and_add_event, .{
-            loop, allocator, "Yield was used instead of yield from in Task {s} with Future {s}\x00",
+            loop_data, allocator, "Yield was used instead of yield from in Task {s} with Future {s}\x00",
             task, @as(PyObject, @ptrCast(future))
         }
     );
 }
 
 inline fn successfully_execution(
-    task: *Task.constructors.PythonTaskObject, result: PyObject
+    task: *Task.PythonTaskObject, result: PyObject
 ) CallbackManager.ExecuteCallbacksReturn {
     if (python_c.PyObject_TypeCheck(result, &Future.PythonFutureType) != 0) {
         return handle_leviathan_future_object(task, @ptrCast(result));
     }else if (python_c.Py_IsNone(result) != 0) {
-        const loop = task.fut.py_loop.?.loop_obj.?;
+        const loop_data = utils.get_data_ptr(Loop, task.fut.py_loop.?);
 
         const callback: CallbackManager.Callback = .{
             .PythonTask = .{
@@ -259,12 +259,12 @@ inline fn successfully_execution(
             }
         };
         if (builtin.single_threaded) {
-            loop.call_soon(callback) catch |err| {
+            loop_data.call_soon(callback) catch |err| {
                 utils.put_python_runtime_error_message(@errorName(err));
                 return .Exception;
             };
         }else{
-            loop.call_soon_threadsafe(callback) catch |err| {
+            loop_data.call_soon_threadsafe(callback) catch |err| {
                 utils.put_python_runtime_error_message(@errorName(err));
                 return .Exception;
             };
@@ -277,24 +277,24 @@ inline fn successfully_execution(
     return handle_legacy_future_object(task, result);
 }
 
-inline fn failed_execution(task: *Task.constructors.PythonTaskObject) CallbackManager.ExecuteCallbacksReturn {
+inline fn failed_execution(task: *Task.PythonTaskObject) CallbackManager.ExecuteCallbacksReturn {
     const exc_match = python_c.PyErr_GivenExceptionMatches;
 
-    const fut: *Future.constructors.PythonFutureObject = &task.fut;
-    const future_obj = fut.future_obj.?;
+    const fut: *Future.PythonFutureObject = &task.fut;
+    const future_data = utils.get_data_ptr(Future, fut);
     const exception: PyObject = python_c.PyErr_GetRaisedException() orelse return .Exception;
     defer python_c.py_decref(exception);
 
     if (exc_match(exception, python_c.PyExc_StopIteration) > 0) {
         if (task.must_cancel) {
-            if (!Future.cancel.future_fast_cancel(fut, future_obj, fut.cancel_msg_py_object)) {
+            if (!Future.cancel.future_fast_cancel(fut, fut.cancel_msg_py_object)) {
                 return .Exception;
             }
         }else{
             const value: PyObject = python_c.PyObject_GetAttrString(exception, "value\x00")
                 orelse return .Exception;
             return execute_zig_function(
-                Future.result.future_fast_set_result, .{future_obj, value}
+                Future.result.future_fast_set_result, .{future_data, value}
             );
         }
 
@@ -304,7 +304,7 @@ inline fn failed_execution(task: *Task.constructors.PythonTaskObject) CallbackMa
     const py_loop = task.fut.py_loop.?;
     const cancelled_error = py_loop.cancelled_error_exc.?;
     if (exc_match(exception, cancelled_error) > 0) {
-        if (!Future.cancel.future_fast_cancel(fut, future_obj, null)) {
+        if (!Future.cancel.future_fast_cancel(fut, null)) {
             return .Exception;
         }
         return .Continue;
@@ -312,7 +312,7 @@ inline fn failed_execution(task: *Task.constructors.PythonTaskObject) CallbackMa
 
     if (
         utils.execute_zig_function(
-            Future.result.future_fast_set_exception, .{fut, future_obj, exception}
+            Future.result.future_fast_set_exception, .{fut, future_data, exception}
         ) < 0 or
         exc_match(exception, python_c.PyExc_SystemExit) > 0 or
         exc_match(exception, python_c.PyExc_KeyboardInterrupt) > 0
@@ -329,23 +329,23 @@ inline fn failed_execution(task: *Task.constructors.PythonTaskObject) CallbackMa
     return .Continue;
 }
 
-pub inline fn release_python_task_callback(task: *Task.constructors.PythonTaskObject, exc_value: ?PyObject) void {
+pub inline fn release_python_task_callback(task: *Task.PythonTaskObject, exc_value: ?PyObject) void {
     python_c.py_decref(@ptrCast(task));
     python_c.py_xdecref(exc_value);
 }
 
 pub fn step_run_and_handle_result(
-    task: *Task.constructors.PythonTaskObject, exc_value: ?PyObject
+    task: *Task.PythonTaskObject, exc_value: ?PyObject
 ) CallbackManager.ExecuteCallbacksReturn {
     var exception_value: ?PyObject = exc_value;
     defer release_python_task_callback(task, exception_value);
 
-    const future = task.fut.future_obj.?;
-    const mutex = &future.mutex;
+    const future_data = utils.get_data_ptr(Future, &task.fut);
+    const mutex = &future_data.mutex;
     mutex.lock();
     defer mutex.unlock();
 
-    if (future.status != .PENDING) {
+    if (future_data.status != .PENDING) {
         utils.put_python_runtime_error_message(
             "Task already finished\x00"
         );
@@ -401,7 +401,7 @@ pub fn step_run_and_handle_result(
 fn wakeup_task(
     data: ?*anyopaque, status: CallbackManager.ExecuteCallbacksReturn
 ) CallbackManager.ExecuteCallbacksReturn {
-    const task: *Task.constructors.PythonTaskObject = @alignCast(@ptrCast(data.?));
+    const task: *Task.PythonTaskObject = @alignCast(@ptrCast(data.?));
 
     if (status != .Continue) {
         python_c.py_decref(@ptrCast(task));
@@ -418,7 +418,7 @@ fn wakeup_task(
     defer python_c.py_decref(py_future);
 
     if (python_c.PyObject_TypeCheck(py_future, &Future.PythonFutureType) != 0) {
-        const leviathan_fut: *Future.constructors.PythonFutureObject = @alignCast(@ptrCast(py_future));
+        const leviathan_fut: *Future.PythonFutureObject = @alignCast(@ptrCast(py_future));
         if (leviathan_fut.exception) |exception| {
             exc_value = python_c.py_newref(exception);
         }
@@ -440,7 +440,7 @@ fn wakeup_task(
 }
 
 fn py_wake_up(
-    self: ?*Task.constructors.PythonTaskObject, fut: ?PyObject
+    self: ?*Task.PythonTaskObject, fut: ?PyObject
 ) ?PyObject {
     _ = fut.?;
     const ret: CallbackManager.ExecuteCallbacksReturn = @call(.always_inline, wakeup_task, .{self, .Continue});

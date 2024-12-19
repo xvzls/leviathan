@@ -4,12 +4,11 @@ const python_c = @import("python_c");
 const PyObject = *python_c.PyObject;
 
 const Future = @import("../main.zig");
-const constructors = @import("constructors.zig");
-const PythonFutureObject = constructors.PythonFutureObject;
+const PythonFutureObject = Future.PythonFutureObject;
 
 const utils = @import("../../utils/utils.zig");
 
-pub inline fn future_fast_cancel(instance: *PythonFutureObject, obj: *Future, cancel_msg_py_object: ?PyObject) bool {
+pub inline fn future_fast_cancel(instance: *PythonFutureObject, cancel_msg_py_object: ?PyObject) bool {
     if (cancel_msg_py_object) |pyobj| {
         if (python_c.PyUnicode_Check(pyobj) == 0) {
             python_c.PyErr_SetString(python_c.PyExc_TypeError.?, "Cancel message must be a string\x00");
@@ -19,7 +18,8 @@ pub inline fn future_fast_cancel(instance: *PythonFutureObject, obj: *Future, ca
         instance.cancel_msg_py_object = python_c.py_newref(pyobj);
     }
 
-    obj.call_done_callbacks(.CANCELED) catch |err| {
+    const future_data = utils.get_data_ptr(Future, instance);
+    future_data.call_done_callbacks(.CANCELED) catch |err| {
         const err_trace = @errorReturnTrace();
         utils.print_error_traces(err_trace, err);
         utils.put_python_runtime_error_message(@errorName(err));
@@ -32,12 +32,12 @@ pub inline fn future_fast_cancel(instance: *PythonFutureObject, obj: *Future, ca
 pub fn future_cancel(self: ?*PythonFutureObject, args: ?PyObject, kwargs: ?PyObject) callconv(.C) ?PyObject {
     const instance = self.?;
 
-    const obj = instance.future_obj.?;
-    const mutex = &obj.mutex;
+    const future_data = utils.get_data_ptr(Future, instance);
+    const mutex = &future_data.mutex;
     mutex.lock();
     defer mutex.unlock();
 
-    switch (obj.status) {
+    switch (future_data.status) {
         .FINISHED,.CANCELED => return python_c.get_py_false(),
         else => {}
     }
@@ -56,7 +56,7 @@ pub fn future_cancel(self: ?*PythonFutureObject, args: ?PyObject, kwargs: ?PyObj
         return null;
     }
 
-    if (!future_fast_cancel(instance, obj, cancel_msg_py_object)) {
+    if (!future_fast_cancel(instance, cancel_msg_py_object)) {
         return null;
     }
 
@@ -64,14 +64,12 @@ pub fn future_cancel(self: ?*PythonFutureObject, args: ?PyObject, kwargs: ?PyObj
 }
 
 pub fn future_cancelled(self: ?*PythonFutureObject, _: ?PyObject) callconv(.C) ?PyObject {
-    const instance = self.?;
-
-    const obj = instance.future_obj.?;
-    const mutex = &obj.mutex;
+    const future_data = utils.get_data_ptr(Future, self.?);
+    const mutex = &future_data.mutex;
     mutex.lock();
     defer mutex.unlock();
 
-    return switch (obj.status) {
+    return switch (future_data.status) {
         .CANCELED => python_c.get_py_true(),
         else => python_c.get_py_false()
     };

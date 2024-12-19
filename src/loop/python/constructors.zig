@@ -4,22 +4,7 @@ const PyObject = *python_c.PyObject;
 const utils = @import("../../utils/utils.zig");
 
 const Loop = @import("../main.zig");
-
-pub const PythonLoopObject = extern struct {
-    ob_base: python_c.PyObject,
-    loop_obj: ?*Loop,
-
-    asyncio_module: ?PyObject,
-    invalid_state_exc: ?PyObject,
-    cancelled_error_exc: ?PyObject,
-    
-    enter_task_func: ?PyObject,
-    leave_task_func: ?PyObject,
-
-    contextvars_module: ?PyObject,
-    contextvars_copy: ?PyObject,
-    exception_handler: ?PyObject,
-};
+const PythonLoopObject = Loop.PythonLoopObject;
 
 inline fn z_loop_new(
     @"type": *python_c.PyTypeObject, _: ?PyObject,
@@ -27,8 +12,6 @@ inline fn z_loop_new(
 ) !*PythonLoopObject {
     const instance: *PythonLoopObject = @ptrCast(@"type".tp_alloc.?(@"type", 0) orelse return error.PythonError);
     errdefer @"type".tp_free.?(instance);
-
-    instance.loop_obj = null;
 
     const contextvars_module: PyObject = python_c.PyImport_ImportModule("contextvars\x00")
         orelse return error.PythonError;
@@ -58,6 +41,9 @@ inline fn z_loop_new(
         orelse return error.PythonError;
     errdefer python_c.py_decref(leave_task_func);
 
+    const loop_data = utils.get_data_ptr(Loop, instance);
+    loop_data.released = true;
+
     instance.asyncio_module = asyncio_module;
     instance.cancelled_error_exc = cancelled_error_exc;
     instance.invalid_state_exc = invalid_state_exc;
@@ -83,9 +69,9 @@ pub fn loop_new(
 
 pub fn loop_clear(self: ?*PythonLoopObject) callconv(.C) c_int {
     const py_loop = self.?;
-    if (py_loop.loop_obj) |loop| {
-        loop.release();
-        py_loop.loop_obj = null;
+    const loop_data = utils.get_data_ptr(Loop, py_loop);
+    if (!loop_data.released) {
+        loop_data.release();
     }
 
     python_c.py_decref_and_set_null(&py_loop.asyncio_module);
@@ -150,8 +136,9 @@ inline fn z_loop_init(
     errdefer python_c.py_decref(exception_handler.?);
 
     const allocator = utils.gpa.allocator();
-    self.loop_obj = try Loop.init(allocator, @intCast(ready_tasks_queue_min_bytes_capacity));
-    self.loop_obj.?.py_loop = self;
+    const loop_data = utils.get_data_ptr(Loop, self);
+    try loop_data.init(allocator, @intCast(ready_tasks_queue_min_bytes_capacity));
+
     return 0;
 }
 

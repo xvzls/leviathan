@@ -6,6 +6,8 @@ const Future = @import("main.zig");
 
 const BTree = @import("../utils/btree/btree.zig");
 const LinkedList = @import("../utils/linked_list.zig");
+const utils = @import("../utils/utils.zig");
+
 const python_c = @import("python_c");
 const PyObject = *python_c.PyObject;
 
@@ -13,7 +15,7 @@ const MaxCallbacks = 8;
 
 pub const FutureCallbacksSetData = struct {
     sets_queue: *CallbackManager.CallbacksSetsQueue,
-    future: PyObject,
+    future: *Future.PythonFutureObject,
 };
 
 pub const FutureCallbackData = struct {
@@ -63,7 +65,7 @@ pub fn callback_for_python_future_callbacks(data: FutureCallbackData) CallbackMa
 pub inline fn callback_for_python_future_set_callbacks(
     allocator: std.mem.Allocator, data: FutureCallbacksSetData, status: CallbackManager.ExecuteCallbacksReturn
 ) CallbackManager.ExecuteCallbacksReturn {
-    defer python_c.py_decref(data.future);
+    defer python_c.py_decref(@ptrCast(data.future));
     return CallbackManager.execute_callbacks(allocator, data.sets_queue, status, false);
 }
 
@@ -135,20 +137,21 @@ pub inline fn call_done_callbacks(self: *Future, new_status: Future.FutureStatus
         return;
     }
 
-    const pyfut: PyObject = @ptrCast(python_c.py_newref(self.py_future.?));
-    errdefer python_c.py_decref(pyfut);
+    const pyfut = utils.get_parent_ptr(Future.PythonFutureObject, self);
+    python_c.py_incref(@ptrCast(pyfut));
+    errdefer python_c.py_decref(@ptrCast(pyfut));
 
-    const loop = self.loop.?;
     const callback: CallbackManager.Callback = .{
         .PythonFutureCallbacksSet = .{
             .sets_queue = &self.callbacks_queue,
             .future = pyfut
         }
     };
+
     if (builtin.single_threaded) {
-        try loop.call_soon(callback);
+        try self.loop.call_soon(callback);
     }else{
-        try loop.call_soon_threadsafe(callback);
+        try self.loop.call_soon_threadsafe(callback);
     }
 
     self.status = new_status;

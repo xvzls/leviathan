@@ -55,7 +55,7 @@ inline fn remove_exceded_callbacks(
     }
 }
 
-fn call_once(
+inline fn call_once(
     loop: *Loop, index: usize, max_number_of_callbacks_set: usize,
     ready_queue: *CallbackManager.CallbacksSetsQueue
 ) CallbackManager.ExecuteCallbacksReturn {

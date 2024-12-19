@@ -3,10 +3,8 @@ const builtin = @import("builtin");
 const python_c = @import("python_c");
 const PyObject = *python_c.PyObject;
 
-const constructors = @import("constructors.zig");
-const PythonFutureObject = constructors.PythonFutureObject;
-
 const Future = @import("../main.zig");
+const PythonFutureObject = Future.PythonFutureObject;
 
 const CallbackManager = @import("../../callback_manager.zig");
 
@@ -37,12 +35,12 @@ inline fn z_future_add_done_callback(self: *PythonFutureObject, args: PyObject) 
         orelse return error.PythonError;
     errdefer python_c.py_decref(contextvars_run_func);
 
-    const obj = self.future_obj.?;
-    const mutex = &obj.mutex;
+    const future_data = utils.get_data_ptr(Future, self);
+    const mutex = &future_data.mutex;
     mutex.lock();
     defer mutex.unlock();
 
-    const allocator = obj.callbacks_arena_allocator;
+    const allocator = future_data.callbacks_arena_allocator;
     const callback_args = try allocator.alloc(PyObject, 2);
     errdefer allocator.free(callback_args);
 
@@ -59,17 +57,17 @@ inline fn z_future_add_done_callback(self: *PythonFutureObject, args: PyObject) 
         }
     };
 
-    switch (obj.status) {
-        .PENDING => try obj.add_done_callback(callback_data),
+    switch (future_data.status) {
+        .PENDING => try future_data.add_done_callback(callback_data),
         else => {
             python_c.py_incref(@ptrCast(self));
             errdefer python_c.py_decref(@ptrCast(self));
 
             callback_data.PythonFuture.dec_future = true;
             if (builtin.single_threaded) {
-                try obj.loop.?.call_soon(callback_data);
+                try future_data.loop.call_soon(callback_data);
             }else{
-                try obj.loop.?.call_soon_threadsafe(callback_data);
+                try future_data.loop.call_soon_threadsafe(callback_data);
             }
         }
     }
@@ -82,18 +80,17 @@ pub fn future_add_done_callback(self: ?*PythonFutureObject, args: ?PyObject) cal
 }
 
 pub fn future_remove_done_callback(self: ?*PythonFutureObject, args: ?PyObject) callconv(.C) ?PyObject {
-    const instance = self.?;
     var callback: ?PyObject = null;
     if (python_c.PyArg_ParseTuple(args.?, "O\x00", &callback) < 0) {
         return null;
     }
 
-    const obj = instance.future_obj.?;
-    const mutex = &obj.mutex;
+    const future_data = utils.get_data_ptr(Future, self.?);
+    const mutex = &future_data.mutex;
     mutex.lock();
     defer mutex.unlock();
 
-    const removed_count = obj.remove_done_callback(@intCast(@intFromPtr(callback.?))) catch |err| {
+    const removed_count = future_data.remove_done_callback(@intCast(@intFromPtr(callback.?))) catch |err| {
         const err_trace = @errorReturnTrace();
         utils.print_error_traces(err_trace, err);
         utils.put_python_runtime_error_message(@errorName(err));

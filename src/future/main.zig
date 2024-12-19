@@ -11,52 +11,39 @@ pub const FutureStatus = enum {
     PENDING, FINISHED, CANCELED
 };
 
-allocator: std.mem.Allocator,
-
 result: ?*anyopaque = null,
 status: FutureStatus = .PENDING,
 
-mutex: std.Thread.Mutex,
+mutex: std.Thread.Mutex = .{},
 
 callbacks_arena: std.heap.ArenaAllocator,
 callbacks_arena_allocator: std.mem.Allocator = undefined,
 callbacks_queue: CallbackManager.CallbacksSetsQueue = undefined,
-loop: ?*Loop = null,
+loop: *Loop,
 
-py_future: ?Future.constructors.PythonFutureObject = null,
+released: bool = false,
 
 
-pub fn init(allocator: std.mem.Allocator, loop: *Loop) !*Future {
-    const fut = try allocator.create(Future);
-    errdefer allocator.destroy(fut);
-
-    const mutex = std.Thread.Mutex{};
-
-    fut.* = .{
-        .allocator = allocator,
+pub fn init(self: *Future, loop: *Loop) void {
+    self.* = .{
         .loop = loop,
-        .mutex = mutex,
-        .callbacks_arena = std.heap.ArenaAllocator.init(allocator)
+        .callbacks_arena = std.heap.ArenaAllocator.init(loop.allocator)
     };
 
-    fut.callbacks_arena_allocator = fut.callbacks_arena.allocator();
-    fut.callbacks_queue = .{
-        .queue = LinkedList.init(fut.callbacks_arena_allocator),
+    self.callbacks_arena_allocator = self.callbacks_arena.allocator();
+    self.callbacks_queue = .{
+        .queue = LinkedList.init(self.callbacks_arena_allocator),
         .last_set = null
     };
-
-    return fut;
 }
 
 pub inline fn release(self: *Future) void {
     if (self.status == .PENDING) {
-        _ = CallbackManager.execute_callbacks(self.allocator, &self.callbacks_queue, .Stop, false);
+        _ = CallbackManager.execute_callbacks(self.loop.allocator, &self.callbacks_queue, .Stop, false);
     }
 
     self.callbacks_arena.deinit();
-    const allocator = self.allocator;
-
-    allocator.destroy(self);
+    self.released = true;
 }
 
 pub usingnamespace @import("callback.zig");

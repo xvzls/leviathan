@@ -1,8 +1,11 @@
-const python_c = @import("python_c");
-pub const constructors = @import("constructors.zig");
+const Loop = @import("../main.zig");
 
-const control = @import("control.zig");
+const python_c = @import("python_c");
+const PyObject = *python_c.PyObject;
+
+const constructors = @import("constructors.zig");
 const scheduling = @import("scheduling.zig");
+const control = @import("control.zig");
 
 const PythonLoopMethods: []const python_c.PyMethodDef = &[_]python_c.PyMethodDef{
     python_c.PyMethodDef{
@@ -46,10 +49,26 @@ const PythonLoopMethods: []const python_c.PyMethodDef = &[_]python_c.PyMethodDef
     }
 };
 
+pub const PythonLoopObject = extern struct {
+    ob_base: python_c.PyObject,
+    data: [@sizeOf(Loop)]u8,
+
+    asyncio_module: ?PyObject,
+    invalid_state_exc: ?PyObject,
+    cancelled_error_exc: ?PyObject,
+    
+    enter_task_func: ?PyObject,
+    leave_task_func: ?PyObject,
+
+    contextvars_module: ?PyObject,
+    contextvars_copy: ?PyObject,
+    exception_handler: ?PyObject,
+};
+
 pub var PythonLoopType = python_c.PyTypeObject{
     .tp_name = "leviathan.Loop\x00",
     .tp_doc = "Leviathan's loop class\x00",
-    .tp_basicsize = @sizeOf(constructors.PythonLoopObject),
+    .tp_basicsize = @sizeOf(PythonLoopObject),
     .tp_itemsize = 0,
     .tp_flags = python_c.Py_TPFLAGS_DEFAULT | python_c.Py_TPFLAGS_BASETYPE | python_c.Py_TPFLAGS_HAVE_GC,
     .tp_new = &constructors.loop_new,

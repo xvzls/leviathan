@@ -2,19 +2,20 @@ const python_c = @import("python_c");
 const PyObject = *python_c.PyObject;
 
 const utils = @import("../utils/utils.zig");
-const constructors = @import("constructors.zig");
-const PythonTaskObject = constructors.PythonTaskObject;
 
+const Future = @import("../future/main.zig");
+const Task = @import("main.zig");
+const PythonTaskObject = Task.PythonTaskObject;
 
 pub fn task_cancel(self: ?*PythonTaskObject, args: ?PyObject, kwargs: ?PyObject) callconv(.C) ?PyObject {
     const instance = self.?;
 
-    const obj = instance.fut.future_obj.?;
-    const mutex = &obj.mutex;
+    const future_data = utils.get_data_ptr(Future, &instance.fut);
+    const mutex = &future_data.mutex;
     mutex.lock();
     defer mutex.unlock();
 
-    switch (obj.status) {
+    switch (future_data.status) {
         .FINISHED,.CANCELED => return python_c.get_py_false(),
         else => {}
     }
@@ -50,9 +51,9 @@ pub fn task_cancel(self: ?*PythonTaskObject, args: ?PyObject, kwargs: ?PyObject)
 
 pub fn task_uncancel(self: ?*PythonTaskObject) callconv(.C) ?PyObject {
     const instance = self.?;
-    const obj = instance.fut.future_obj.?;
+    const future_data = utils.get_data_ptr(Future, &instance.fut);
 
-    const mutex = &obj.mutex;
+    const mutex = &future_data.mutex;
     mutex.lock();
     defer mutex.unlock();
 
@@ -65,12 +66,12 @@ pub fn task_uncancel(self: ?*PythonTaskObject) callconv(.C) ?PyObject {
 pub fn task_cancelling(self: ?*PythonTaskObject) callconv(.C) ?PyObject {
     const instance = self.?;
 
-    const obj = instance.fut.future_obj.?;
-    const mutex = &obj.mutex;
+    const future_data = utils.get_data_ptr(Future, &instance.fut);
+    const mutex = &future_data.mutex;
     mutex.lock();
     defer mutex.unlock();
 
-    return switch (obj.status) {
+    return switch (future_data.status) {
         .CANCELED,.FINISHED => python_c.PyLong_FromUnsignedLongLong(0),
         else => python_c.PyLong_FromUnsignedLongLong(@intCast(instance.cancel_requests))
     };

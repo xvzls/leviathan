@@ -8,26 +8,11 @@ const Future = @import("../future/main.zig");
 const Loop = @import("../loop/main.zig");
 
 const Task = @import("main.zig");
+const PythonTaskObject = Task.PythonTaskObject;
 
 const std = @import("std");
 const builtin = @import("builtin");
 
-pub const PythonTaskObject = extern struct {
-    fut: Future.constructors.PythonFutureObject,
-
-    py_context: ?PyObject,
-    run_context: ?PyObject,
-    name: ?PyObject,
-
-    coro: ?PyObject,
-    coro_send: ?PyObject,
-    coro_throw: ?PyObject,
-
-    cancel_requests: usize,
-    must_cancel: bool,
-
-    fut_waiter: ?PyObject
-};
 
 inline fn z_task_new(
     @"type": *python_c.PyTypeObject, _: ?PyObject,
@@ -36,16 +21,18 @@ inline fn z_task_new(
     const instance: *PythonTaskObject = @ptrCast(@"type".tp_alloc.?(@"type", 0) orelse return error.PythonError);
     errdefer @"type".tp_free.?(instance);
 
-    instance.fut.asyncio_module = null;
-    instance.fut.invalid_state_exc = null;
-    instance.fut.cancelled_error_exc = null;
+    const fut: *Future.PythonFutureObject = &instance.fut;
+    fut.asyncio_module = null;
+    fut.invalid_state_exc = null;
+    fut.cancelled_error_exc = null;
 
-    instance.fut.future_obj = null;
-    instance.fut.exception_tb = null;
-    instance.fut.exception = null;
+    const future_data = utils.get_data_ptr(Future, fut);
+    future_data.released = true;
+    fut.exception_tb = null;
+    fut.exception = null;
 
-    instance.fut.cancel_msg_py_object = null;
-    instance.fut.blocking = 0;
+    fut.cancel_msg_py_object = null;
+    fut.blocking = 0;
 
     instance.py_context = null;
     instance.coro = null;
@@ -67,15 +54,17 @@ pub fn task_new(
 
 pub fn task_clear(self: ?*PythonTaskObject) callconv(.C) c_int {
     const py_task = self.?;
-    if (py_task.fut.future_obj) |future_obj| {
-        future_obj.release();
-        py_task.fut.future_obj = null;
+    const fut = &py_task.fut;
+
+    const future_data = utils.get_data_ptr(Future, fut);
+    if (!future_data.released) {
+        future_data.release();
     }
 
-    python_c.py_decref_and_set_null(@ptrCast(&py_task.fut.py_loop));
-    python_c.py_decref_and_set_null(&py_task.fut.exception);
-    python_c.py_decref_and_set_null(&py_task.fut.exception_tb);
-    python_c.py_decref_and_set_null(&py_task.fut.cancel_msg_py_object);
+    python_c.py_decref_and_set_null(@ptrCast(&fut.py_loop));
+    python_c.py_decref_and_set_null(&fut.exception);
+    python_c.py_decref_and_set_null(&fut.exception_tb);
+    python_c.py_decref_and_set_null(&fut.cancel_msg_py_object);
 
     python_c.py_decref_and_set_null(&py_task.py_context);
     python_c.py_decref_and_set_null(&py_task.run_context);
@@ -143,7 +132,7 @@ inline fn z_task_init(
         return error.PythonError;
     }
 
-    const leviathan_loop: *Loop.constructors.PythonLoopObject = @ptrCast(py_loop.?);
+    const leviathan_loop: *Loop.PythonLoopObject = @ptrCast(py_loop.?);
     if (python_c.PyObject_TypeCheck(@ptrCast(leviathan_loop), &Loop.PythonLoopType) == 0) {
         utils.put_python_runtime_error_message(
             "Invalid asyncio event loop. Only Leviathan's event loops are allowed\x00"
@@ -182,12 +171,10 @@ inline fn z_task_init(
     self.run_context = python_c.PyObject_GetAttrString(self.py_context.?, "run\x00") orelse return error.PythonError;
     errdefer python_c.py_decref_and_set_null(&self.run_context);
 
-    const loop = leviathan_loop.loop_obj.?;
-
-    const future_obj = try Future.init(loop.allocator, leviathan_loop.loop_obj.?);
-    future_obj.py_future = @ptrCast(self);
-    self.fut.future_obj = future_obj;
-    errdefer self.fut.future_obj.?.release();
+    const loop_data = utils.get_data_ptr(Loop, leviathan_loop);
+    const future_data = utils.get_data_ptr(Future, &self.fut);
+    future_data.init(loop_data);
+    errdefer future_data.release();
 
     self.fut.py_loop = python_c.py_newref(leviathan_loop);
     errdefer python_c.py_decref_and_set_null(@ptrCast(&self.fut.py_loop));
@@ -205,7 +192,7 @@ inline fn z_task_init(
     self.name = python_c.py_newref(name.?);
     errdefer python_c.py_decref_and_set_null(&self.name);
     
-    const mutex = &future_obj.mutex;
+    const mutex = &future_data.mutex;
     mutex.lock();
     defer mutex.unlock();
 
@@ -216,9 +203,9 @@ inline fn z_task_init(
     };
 
     if (builtin.single_threaded) {
-        try loop.call_soon(callback);
+        try loop_data.call_soon(callback);
     }else{
-        try loop.call_soon_threadsafe(callback);
+        try loop_data.call_soon_threadsafe(callback);
     }
     python_c.py_incref(@ptrCast(self));
 

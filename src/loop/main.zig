@@ -30,18 +30,14 @@ mutex: std.Thread.Mutex,
 running: bool = false,
 stopping: bool = false,
 closed: bool = false,
+released: bool = false,
 
-py_loop: ?*Loop.constructors.PythonLoopObject = null,
-
-pub fn init(allocator: std.mem.Allocator, rtq_min_capacity: usize) !*Loop {
-    const loop = try allocator.create(Loop);
-    errdefer allocator.destroy(loop);
-
+pub fn init(self: *Loop, allocator: std.mem.Allocator, rtq_min_capacity: usize) !void {
     const max_callbacks_sets_per_queue = CallbackManager.get_max_callbacks_sets(
         rtq_min_capacity, MaxCallbacks
     );
 
-    loop.* = .{
+    self.* = .{
         .allocator = allocator,
         .mutex = std.Thread.Mutex{},
         .ready_tasks_queues = .{
@@ -61,8 +57,6 @@ pub fn init(allocator: std.mem.Allocator, rtq_min_capacity: usize) !*Loop {
             .btree = try BTree.init(allocator),
         }
     };
-
-    return loop;
 }
 
 pub fn release(self: *Loop) void {
@@ -87,7 +81,7 @@ pub fn release(self: *Loop) void {
     while (delayed_tasks_btree.pop(null) != null) {}
     delayed_tasks_btree.release() catch unreachable;
 
-    allocator.destroy(self);
+    self.released = true;
 }
 
 pub usingnamespace @import("control.zig");

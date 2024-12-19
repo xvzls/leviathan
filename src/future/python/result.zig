@@ -2,8 +2,7 @@ const python_c = @import("python_c");
 const PyObject = *python_c.PyObject;
 
 const Future = @import("../main.zig");
-const constructors = @import("constructors.zig");
-const PythonFutureObject = constructors.PythonFutureObject;
+const PythonFutureObject = Future.PythonFutureObject;
 
 const utils = @import("../../utils/utils.zig");
 
@@ -17,8 +16,8 @@ inline fn raise_cancel_exception(self: *PythonFutureObject) void {
 }
 
 pub inline fn get_result(self: *PythonFutureObject) ?PyObject {
-    const obj = self.future_obj.?;
-    return switch (obj.status) {
+    const future_data = utils.get_data_ptr(Future, self);
+    return switch (future_data.status) {
         .PENDING => blk: {
             python_c.PyErr_SetString(self.invalid_state_exc.?, "Result is not ready.\x00");
             break :blk null;
@@ -37,7 +36,7 @@ pub inline fn get_result(self: *PythonFutureObject) ?PyObject {
                 python_c.PyErr_SetRaisedException(new_exc);
                 break :blk null;
             }
-            break :blk @as(PyObject, @alignCast(@ptrCast(obj.result.?)));
+            break :blk @as(PyObject, @alignCast(@ptrCast(future_data.result.?)));
         },
         .CANCELED => blk: {
             raise_cancel_exception(self);
@@ -49,7 +48,8 @@ pub inline fn get_result(self: *PythonFutureObject) ?PyObject {
 
 pub fn future_result(self: ?*PythonFutureObject, _: ?PyObject) callconv(.C) ?PyObject {
     const instance = self.?;
-    const mutex = &instance.future_obj.?.mutex;
+    const future_data = utils.get_data_ptr(Future, instance);
+    const mutex = &future_data.mutex;
     mutex.lock();
     defer mutex.unlock();
 
@@ -58,12 +58,13 @@ pub fn future_result(self: ?*PythonFutureObject, _: ?PyObject) callconv(.C) ?PyO
 
 pub fn future_exception(self: ?*PythonFutureObject, _: ?PyObject) callconv(.C) ?PyObject {
     const instance = self.?;
-    const obj = instance.future_obj.?;
-    const mutex = &obj.mutex;
+
+    const future_data = utils.get_data_ptr(Future, instance);
+    const mutex = &future_data.mutex;
     mutex.lock();
     defer mutex.unlock();
 
-    return switch (obj.status) {
+    return switch (future_data.status) {
         .PENDING => blk: {
             python_c.PyErr_SetString(instance.invalid_state_exc.?, "Exception is not set.\x00");
             break :blk null;
@@ -93,12 +94,12 @@ pub inline fn future_fast_set_exception(self: *PythonFutureObject, obj: *Future,
 }
 
 inline fn z_future_set_exception(self: *PythonFutureObject, args: ?PyObject) !PyObject {
-    const obj = self.future_obj.?;
-    const mutex = &obj.mutex;
+    const future_data = utils.get_data_ptr(Future, self);
+    const mutex = &future_data.mutex;
     mutex.lock();
     defer mutex.unlock();
 
-    switch (obj.status) {
+    switch (future_data.status) {
         .FINISHED,.CANCELED => {
             python_c.PyErr_SetString(self.invalid_state_exc.?, "Exception already setted\x00");
             return error.PythonError;
@@ -111,7 +112,7 @@ inline fn z_future_set_exception(self: *PythonFutureObject, args: ?PyObject) !Py
         return error.PythonError;
     }
 
-    _ = try future_fast_set_exception(self, obj, exception.?);
+    _ = try future_fast_set_exception(self, future_data, exception.?);
     return python_c.get_py_none();
 }
 
@@ -127,12 +128,12 @@ pub inline fn future_fast_set_result(obj: *Future, result: PyObject) !void {
 }
 
 inline fn z_future_set_result(self: *PythonFutureObject, args: ?PyObject) !PyObject {
-    const obj = self.future_obj.?;
-    const mutex = &obj.mutex;
+    const future_data = utils.get_data_ptr(Future, self);
+    const mutex = &future_data.mutex;
     mutex.lock();
     defer mutex.unlock();
 
-    switch (obj.status) {
+    switch (future_data.status) {
         .FINISHED,.CANCELED => {
             python_c.PyErr_SetString(self.invalid_state_exc.?, "Result already setted\x00");
             return error.PythonError;
@@ -145,7 +146,7 @@ inline fn z_future_set_result(self: *PythonFutureObject, args: ?PyObject) !PyObj
         return error.PythonError;
     }
 
-    try future_fast_set_result(obj, result.?);
+    try future_fast_set_result(future_data, result.?);
     return python_c.get_py_none();
 }
 
@@ -154,13 +155,12 @@ pub fn future_set_result(self: ?*PythonFutureObject, args: ?PyObject) callconv(.
 }
 
 pub fn future_done(self: ?*PythonFutureObject, _: ?PyObject) callconv(.C) ?PyObject {
-    const instance = self.?;
-    const obj = instance.future_obj.?;
-    const mutex = &obj.mutex;
+    const future_data = utils.get_data_ptr(Future, self.?);
+    const mutex = &future_data.mutex;
     mutex.lock();
     defer mutex.unlock();
 
-    return switch (obj.status) {
+    return switch (future_data.status) {
         .FINISHED,.CANCELED => python_c.get_py_true(),
         else => python_c.get_py_false()
     };

@@ -1,4 +1,8 @@
+const Future = @import("../main.zig");
+const Loop = @import("../../loop/main.zig");
+
 const python_c = @import("python_c");
+const PyObject = *python_c.PyObject;
 
 pub const constructors = @import("constructors.zig");
 pub const result = @import("result.zig");
@@ -71,11 +75,27 @@ const PythonFutureMethods: []const python_c.PyMethodDef = &[_]python_c.PyMethodD
     }
 };
 
+pub const PythonFutureObject = extern struct {
+    ob_base: python_c.PyObject,
+    data: [@sizeOf(Future)]u8,
+
+    asyncio_module: ?PyObject,
+    invalid_state_exc: ?PyObject,
+    cancelled_error_exc: ?PyObject,
+
+    py_loop: ?*Loop.PythonLoopObject,
+    exception: ?PyObject,
+    exception_tb: ?PyObject,
+
+    cancel_msg_py_object: ?PyObject,
+    blocking: u64
+};
+
 const PythonFutureMembers: []const python_c.PyMemberDef = &[_]python_c.PyMemberDef{
     python_c.PyMemberDef{ // Just for be supported by asyncio.isfuture
         .name = "_asyncio_future_blocking\x00",
         .type = python_c.Py_T_BOOL,
-        .offset = @offsetOf(constructors.PythonFutureObject, "blocking"),
+        .offset = @offsetOf(PythonFutureObject, "blocking"),
         .doc = null,
     },
     python_c.PyMemberDef{
@@ -90,7 +110,7 @@ const PythonFutureAsyncMethods = python_c.PyAsyncMethods{
 pub var PythonFutureType = python_c.PyTypeObject{
     .tp_name = "leviathan.Future\x00",
     .tp_doc = "Leviathan's future class\x00",
-    .tp_basicsize = @sizeOf(constructors.PythonFutureObject),
+    .tp_basicsize = @sizeOf(PythonFutureObject),
     .tp_itemsize = 0,
     .tp_flags = python_c.Py_TPFLAGS_DEFAULT | python_c.Py_TPFLAGS_BASETYPE | python_c.Py_TPFLAGS_HAVE_GC,
     .tp_new = &constructors.future_new,

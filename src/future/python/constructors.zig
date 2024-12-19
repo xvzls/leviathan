@@ -7,23 +7,10 @@ const result = @import("result.zig");
 const Future = @import("../main.zig");
 const Loop = @import("../../loop/main.zig");
 
+const PythonFutureObject = Future.PythonFutureObject;
+
 const std = @import("std");
 
-pub const PythonFutureObject = extern struct {
-    ob_base: python_c.PyObject,
-    future_obj: ?*Future,
-
-    asyncio_module: ?PyObject,
-    invalid_state_exc: ?PyObject,
-    cancelled_error_exc: ?PyObject,
-
-    py_loop: ?*Loop.constructors.PythonLoopObject,
-    exception: ?PyObject,
-    exception_tb: ?PyObject,
-
-    cancel_msg_py_object: ?PyObject,
-    blocking: u64
-};
 
 inline fn z_future_new(
     @"type": *python_c.PyTypeObject, _: ?PyObject,
@@ -32,11 +19,13 @@ inline fn z_future_new(
     const instance: *PythonFutureObject = @ptrCast(@"type".tp_alloc.?(@"type", 0) orelse return error.PythonError);
     errdefer @"type".tp_free.?(instance);
 
+    const future_data = utils.get_data_ptr(Future, instance);
+    future_data.released = true;
+
     instance.asyncio_module = null;
     instance.invalid_state_exc = null;
     instance.cancelled_error_exc = null;
 
-    instance.future_obj = null;
     instance.exception_tb = null;
     instance.exception = null;
 
@@ -57,9 +46,9 @@ pub fn future_new(
 
 pub fn future_clear(self: ?*PythonFutureObject) callconv(.C) c_int {
     const py_future = self.?;
-    if (py_future.future_obj) |future_obj| {
-        future_obj.release();
-        py_future.future_obj = null;
+    const future_data = utils.get_data_ptr(Future, py_future);
+    if (!future_data.released) {
+        future_data.release();
     }
 
     python_c.py_decref_and_set_null(@ptrCast(&py_future.py_loop));
@@ -108,7 +97,7 @@ inline fn z_future_init(
         return error.PythonError;
     }
 
-    const leviathan_loop: *Loop.constructors.PythonLoopObject = @ptrCast(py_loop.?);
+    const leviathan_loop: *Loop.PythonLoopObject = @ptrCast(py_loop.?);
     if (python_c.PyObject_TypeCheck(@ptrCast(leviathan_loop), &Loop.PythonLoopType) == 0) {
         python_c.PyErr_SetString(
             python_c.PyExc_TypeError, "Invalid asyncio event loop. Only Leviathan's event loops are allowed\x00"
@@ -116,8 +105,9 @@ inline fn z_future_init(
         return error.PythonError;
     }
 
-    self.future_obj = try Future.init(leviathan_loop.loop_obj.?.allocator, leviathan_loop.loop_obj.?);
-    self.future_obj.?.py_future = self;
+    const loop_data = utils.get_data_ptr(Loop, leviathan_loop);
+    const future_data = utils.get_data_ptr(Future, self);
+    future_data.init(loop_data);
     self.py_loop = python_c.py_newref(leviathan_loop);
 
     self.asyncio_module = leviathan_loop.asyncio_module.?;
@@ -133,7 +123,7 @@ pub fn future_init(
     return utils.execute_zig_function(z_future_init, .{self.?, args, kwargs});
 }
 
-pub fn future_get_loop(self: ?*PythonFutureObject) callconv(.C) ?*Loop.constructors.PythonLoopObject {
+pub fn future_get_loop(self: ?*PythonFutureObject) callconv(.C) ?*Loop.PythonLoopObject {
     return python_c.py_newref(self.?.py_loop);
 }
 
@@ -144,13 +134,14 @@ pub fn future_iter(self: ?*PythonFutureObject) callconv(.C) ?PyObject {
 pub fn future_iternext(self: ?*PythonFutureObject) callconv(.C) ?PyObject {
     const instance = self.?;
 
-    const obj = instance.future_obj.?;
-    const mutex = &obj.mutex;
+    const future_data = utils.get_data_ptr(Future, instance);
+
+    const mutex = &future_data.mutex;
     mutex.lock();
     defer mutex.unlock();
 
-    if (obj.status != .PENDING) {
-        const res = result.get_result(obj.py_future.?);
+    if (future_data.status != .PENDING) {
+        const res = result.get_result(instance);
         if (res) |py_res| {
             python_c.PyErr_SetObject(python_c.PyExc_StopIteration, py_res);
         }
