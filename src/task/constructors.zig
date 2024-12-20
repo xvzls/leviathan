@@ -21,7 +21,7 @@ inline fn z_task_new(
     const instance: *PythonTaskObject = @ptrCast(@"type".tp_alloc.?(@"type", 0) orelse return error.PythonError);
     errdefer @"type".tp_free.?(instance);
 
-    Future.constructors.init_fields(&instance.fut);
+    Future.constructors.future_set_initial_values(&instance.fut);
 
     instance.py_context = null;
     instance.coro = null;
@@ -160,7 +160,7 @@ inline fn z_task_init(
     self.run_context = python_c.PyObject_GetAttrString(self.py_context.?, "run\x00") orelse return error.PythonError;
     errdefer python_c.py_decref_and_set_null(&self.run_context);
 
-    Future.constructors.create_future(&self.fut, leviathan_loop);
+    Future.constructors.future_init_configuration(&self.fut, leviathan_loop);
 
     const loop_data = utils.get_data_ptr(Loop, leviathan_loop);
     const future_data = utils.get_data_ptr(Future, &self.fut);

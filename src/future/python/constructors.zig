@@ -11,7 +11,7 @@ const PythonFutureObject = Future.PythonFutureObject;
 
 const std = @import("std");
 
-pub inline fn init_fields(self: *PythonFutureObject) void {
+pub inline fn future_set_initial_values(self: *PythonFutureObject) void {
     const future_data = utils.get_data_ptr(Future, self);
     future_data.released = true;
 
@@ -26,7 +26,7 @@ pub inline fn init_fields(self: *PythonFutureObject) void {
     self.blocking = 0;
 }
 
-pub inline fn create_future(self: *PythonFutureObject, leviathan_loop: *Loop.PythonLoopObject) void {
+pub inline fn future_init_configuration(self: *PythonFutureObject, leviathan_loop: *Loop.PythonLoopObject) void {
     const loop_data = utils.get_data_ptr(Loop, leviathan_loop);
     const future_data = utils.get_data_ptr(Future, self);
     future_data.init(loop_data);
@@ -42,8 +42,8 @@ pub inline fn fast_new_future(leviathan_loop: *Loop.PythonLoopObject) !*PythonFu
         Future.PythonFutureType.tp_alloc.?(&Future.PythonFutureType, 0) orelse return error.PythonError
     );
 
-    init_fields(instance);
-    create_future(instance, leviathan_loop);
+    future_set_initial_values(instance);
+    future_init_configuration(instance, leviathan_loop);
     return instance;
 }
 
@@ -53,7 +53,7 @@ inline fn z_future_new(
 ) !*PythonFutureObject {
     const instance: *PythonFutureObject = @ptrCast(@"type".tp_alloc.?(@"type", 0) orelse return error.PythonError);
     errdefer @"type".tp_free.?(instance);
-    init_fields(instance);
+    future_set_initial_values(instance);
     return instance;
 }
 
@@ -128,7 +128,7 @@ inline fn z_future_init(
         return error.PythonError;
     }
 
-    create_future(self, leviathan_loop);
+    future_init_configuration(self, leviathan_loop);
     return 0;
 }
 
