@@ -10,16 +10,17 @@ const PythonLoopObject = Loop.PythonLoopObject;
 
 const std = @import("std");
 
-inline fn get_py_context(knames: ?PyObject, args: []?PyObject, loop: *PythonLoopObject) !PyObject {
+inline fn get_py_context(knames: ?PyObject, args_ptr: [*]?PyObject, loop: *PythonLoopObject) !PyObject {
     var context: ?PyObject = null;
     if (knames) |kwargs| {
         const kwargs_len = python_c.PyTuple_Size(kwargs);
+        const args = args_ptr[0..@as(usize, @intCast(kwargs_len))];
         if (kwargs_len < 0) {
             return error.PythonError;
         }else if (kwargs_len == 1) {
             const key = python_c.PyTuple_GetItem(kwargs, @intCast(0)) orelse return error.PythonError;
             if (python_c.PyUnicode_CompareWithASCIIString(key, "context\x00") == 0) {
-                context = args[args.len].?;
+                context = args[0].?;
             }else{
                 utils.put_python_runtime_error_message("Invalid keyword argument\x00");
                 return error.PythonError;
@@ -64,7 +65,7 @@ inline fn z_loop_call_soon(
     self: *PythonLoopObject, args: []?PyObject,
     knames: ?PyObject
 ) !*Handle.PythonHandleObject {
-    const context = try get_py_context(knames, args, self);
+    const context = try get_py_context(knames, args.ptr, self);
     errdefer python_c.py_decref(context);
 
     const loop_data = utils.get_data_ptr(Loop, self);
