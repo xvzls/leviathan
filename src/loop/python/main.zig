@@ -57,10 +57,10 @@ const PythonLoopMethods: []const python_c.PyMethodDef = &[_]python_c.PyMethodDef
         .ml_flags = python_c.METH_NOARGS
     },
     python_c.PyMethodDef{
-        .ml_name = "create_future\x00",
+        .ml_name = "create_task\x00",
         .ml_meth = @ptrCast(&utils.task.loop_create_task),
         .ml_doc = "Schedule callback to be called with args arguments at the next iteration of the event loop.\x00",
-        .ml_flags = python_c.METH_NOARGS
+        .ml_flags = python_c.METH_FASTCALL | python_c.METH_KEYWORDS
     },
 
     // --------------------- Sentinel ---------------------
@@ -83,8 +83,6 @@ pub const PythonLoopObject = extern struct {
     contextvars_module: ?PyObject,
     contextvars_copy: ?PyObject,
     exception_handler: ?PyObject,
-
-    task_name_counter: usize
 };
 
 pub var PythonLoopType = python_c.PyTypeObject{

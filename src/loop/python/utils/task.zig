@@ -72,7 +72,7 @@ inline fn z_loop_create_task(
 
     var context: ?PyObject = null;
     var name: ?PyObject = null;
-    try get_py_context_and_name(knames, args.ptr, self, &context, &name);
+    try get_py_context_and_name(knames, args.ptr + 1, self, &context, &name);
     errdefer {
         python_c.py_decref(context.?);
         python_c.py_xdecref(name);
@@ -85,7 +85,6 @@ inline fn z_loop_create_task(
 pub fn loop_create_task(
     self: ?*PythonLoopObject, args: ?[*]?PyObject, nargs: isize, knames: ?PyObject
 ) callconv(.C) ?*PythonTaskObject {
-    _ = args.?;
     return utils.execute_zig_function(z_loop_create_task, .{
         self.?, args.?[0..@as(usize, @intCast(nargs))], knames
     });

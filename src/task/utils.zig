@@ -5,6 +5,9 @@ const utils = @import("../utils/utils.zig");
 const Future = @import("../future/main.zig");
 const Task = @import("main.zig");
 
+const std = @import("std");
+
+
 pub fn task_not_implemented_method(
     _: ?*Task.PythonTaskObject, _: ?PyObject, _: ?PyObject
 ) callconv(.C) ?PyObject {
@@ -21,6 +24,22 @@ pub fn task_get_context(self: ?*Task.PythonTaskObject) callconv(.C) ?PyObject {
 }
 
 pub fn task_get_name(self: ?*Task.PythonTaskObject) callconv(.C) ?PyObject {
+    if (self.?.name) |name| {
+        return python_c.py_newref(name);
+    }
+
+    const allocator = utils.gpa.allocator();
+
+    const randprg = std.crypto.random;
+    const random_bytes = randprg.int(u64);
+    const random_str = std.fmt.allocPrint(allocator, "Leviathan.Task_{x:0>16}\x00", .{random_bytes}) catch |err| {
+        utils.put_python_runtime_error_message(@errorName(err));
+        return null;
+    };
+    defer allocator.free(random_str);
+
+
+
     return python_c.py_newref(self.?.name);
 }
 

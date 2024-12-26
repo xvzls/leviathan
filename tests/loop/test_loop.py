@@ -46,6 +46,6 @@ def test_call_soon_with_context(loop_obj: Type[asyncio.AbstractEventLoop]) -> No
         for _ in range(calls_num):
             loop.call_soon(mock_func, context=copy_context())
         loop.run_forever()
-        assert mock_func.call_count == (calls_num // 2)
+        assert mock_func.call_count == calls_num
     finally:
         loop.close()

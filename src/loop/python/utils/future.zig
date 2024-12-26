@@ -12,6 +12,6 @@ const PythonFutureObject = Future.PythonFutureObject;
 pub fn loop_create_future(
     self: ?*PythonLoopObject, args: ?PyObject
 ) callconv(.C) ?*PythonFutureObject {
-    _ = args.?;
+    _ = args;
     return utils.execute_zig_function(Future.constructors.fast_new_future, .{self.?});
 }
