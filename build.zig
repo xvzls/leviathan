@@ -52,7 +52,7 @@ pub fn build(b: *std.Build) void {
     python_c_module.addIncludePath(.{
         .cwd_relative = "/usr/include/"
     });
-    python_c_module.linkSystemLibrary("python3.12", .{});
+    python_c_module.linkSystemLibrary("python3", .{});
 
     const leviathan_module = b.addModule("leviathan", .{
         .root_source_file = b.path("src/main.zig"),
