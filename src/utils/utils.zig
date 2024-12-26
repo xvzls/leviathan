@@ -33,7 +33,7 @@ pub inline fn get_data_ptr(comptime T: type, leviathan_pyobject: anytype) *T {
         @compileError("T must have a data field");
     }
 
-    return @as(*T, @alignCast(@ptrCast(&@field(leviathan_pyobject, "data"))));
+    return @as(*T, @ptrFromInt(@intFromPtr(leviathan_pyobject) + @offsetOf(type_info.Pointer.child, "data")));
 }
 
 pub inline fn get_parent_ptr(comptime T: type, leviathan_object: anytype) *T {

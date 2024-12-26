@@ -65,14 +65,13 @@ inline fn z_loop_call_soon(
     self: *PythonLoopObject, args: []?PyObject,
     knames: ?PyObject
 ) !*Handle.PythonHandleObject {
-    const context = try get_py_context(knames, args.ptr, self);
+    const context = try get_py_context(knames, args.ptr + args.len, self);
     errdefer python_c.py_decref(context);
 
     const loop_data = utils.get_data_ptr(Loop, self);
     const allocator = loop_data.allocator;
 
     const callback_info = try get_callback_info(allocator, args);
-
     errdefer {
         for (callback_info) |arg| {
             python_c.py_decref(@ptrCast(arg));

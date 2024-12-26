@@ -1,6 +1,6 @@
 pub usingnamespace @cImport({
     @cDefine("PY_SSIZE_T_CLEAN", {});
-    @cInclude("python3.12/Python.h");
+    @cInclude("Python.h");
 });
 
 pub inline fn get_py_true() *Python.PyObject {
@@ -28,6 +28,12 @@ pub inline fn py_incref(op: *Python.PyObject) void {
     }
 
     op.unnamed_0.ob_refcnt_split[0] = new_refcnt;
+}
+
+pub inline fn py_xinref(op: ?*Python.PyObject) void {
+    if (op) |o| {
+        py_incref(o);
+    }
 }
 
 inline fn _Py_IsImmortal(arg_op: *Python.PyObject) bool {

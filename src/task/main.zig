@@ -119,10 +119,10 @@ pub const PythonTaskObject = extern struct {
     coro_send: ?PyObject,
     coro_throw: ?PyObject,
 
+    fut_waiter: ?PyObject,
+
     cancel_requests: usize,
     must_cancel: bool,
-
-    fut_waiter: ?PyObject
 };
 
 pub var PythonTaskType = python_c.PyTypeObject{

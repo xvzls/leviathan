@@ -13,21 +13,87 @@ const PythonTaskObject = Task.PythonTaskObject;
 const std = @import("std");
 const builtin = @import("builtin");
 
+inline fn task_set_initial_values(self: *PythonTaskObject) void {
+    Future.constructors.future_set_initial_values(&self.fut);
+    self.run_context = null;
+    self.py_context = null;
+    self.coro = null;
+    self.name = null;
+
+    self.fut_waiter = null;
+
+    self.cancel_requests = 0;
+    self.must_cancel = false;
+}
+
+inline fn task_init_configuration(
+    self: *PythonTaskObject, loop: *Loop.PythonLoopObject,
+    coro: PyObject, context: PyObject, name: ?PyObject
+) !void {
+    Future.constructors.future_init_configuration(&self.fut, loop);
+    if (python_c.PyCoro_CheckExact(coro) == 0) {
+        utils.put_python_runtime_error_message("Task coro must be a coroutine\x00");
+        return error.PythonError;
+    }
+
+    const coro_send: PyObject = python_c.PyObject_GetAttrString(coro, "send\x00") orelse return error.PythonError;
+    errdefer python_c.py_decref(coro_send);
+
+    const coro_throw: PyObject = python_c.PyObject_GetAttrString(coro, "throw\x00") orelse return error.PythonError;
+    errdefer python_c.py_decref(coro_throw);
+
+    self.name = name;
+
+    self.run_context = python_c.PyObject_GetAttrString(context, "run\x00") orelse return error.PythonError;
+
+    self.coro = coro;
+    self.coro_send = coro_send;
+    self.coro_throw = coro_throw;
+
+    self.py_context = context;
+}
+
+inline fn task_schedule_coro(self: *PythonTaskObject, loop: *Loop.PythonLoopObject) !void {
+    const loop_data = utils.get_data_ptr(Loop, loop);
+
+    const callback: CallbackManager.Callback = .{
+        .PythonTask = .{
+            .task = self
+        }
+    };
+
+    if (builtin.single_threaded) {
+        try loop_data.call_soon(callback);
+    }else{
+        try loop_data.call_soon_threadsafe(callback);
+    }
+    python_c.py_incref(@ptrCast(self));
+}
+
+pub inline fn fast_new_task(
+    loop: *Loop.PythonLoopObject, coro: PyObject,
+    context: PyObject, name: ?PyObject
+) !*PythonTaskObject {
+    const instance: *PythonTaskObject = @ptrCast(
+        Task.PythonTaskType.tp_alloc.?(&Task.PythonTaskType, 0) orelse return error.PythonError
+    );
+    task_set_initial_values(instance);
+    errdefer python_c.py_decref(@ptrCast(instance));
+
+    try task_init_configuration(instance, loop, coro, context, name);
+    errdefer { instance.py_context = null; }
+
+    try task_schedule_coro(instance, loop);
+
+    return instance;
+}
 
 inline fn z_task_new(
     @"type": *python_c.PyTypeObject, _: ?PyObject,
     _: ?PyObject
 ) !*PythonTaskObject {
     const instance: *PythonTaskObject = @ptrCast(@"type".tp_alloc.?(@"type", 0) orelse return error.PythonError);
-    errdefer @"type".tp_free.?(instance);
-
-    Future.constructors.future_set_initial_values(&instance.fut);
-
-    instance.py_context = null;
-    instance.coro = null;
-    instance.name = null;
-
-    instance.fut_waiter = null;
+    task_set_initial_values(instance);
     return instance;
 }
 
@@ -129,68 +195,31 @@ inline fn z_task_init(
         return error.PythonError;
     }
 
-    if (python_c.PyCoro_CheckExact(coro.?) == 0) {
-        utils.put_python_runtime_error_message("Task coro must be a coroutine\x00");
-        return error.PythonError;
-    }
-
-    const coro_send: PyObject = python_c.PyObject_GetAttrString(coro.?, "send\x00") orelse return error.PythonError;
-    errdefer python_c.py_decref(coro_send);
-
-    const coro_throw: PyObject = python_c.PyObject_GetAttrString(coro.?, "throw\x00") orelse return error.PythonError;
-    errdefer python_c.py_decref(coro_throw);
-
-    if (python_c.PyUnicode_Check(name.?) == 0) {
-        utils.put_python_runtime_error_message("Task name must be a string\x00");
-        return error.PythonError;
-    }
-
-    if (context) |py_ctx| {
-        if (python_c.Py_IsNone(py_ctx) != 0) {
-            self.py_context = python_c.PyObject_CallNoArgs(leviathan_loop.contextvars_copy.?)
+    if (context) |*py_ctx| {
+        if (python_c.Py_IsNone(py_ctx.*) != 0) {
+            py_ctx.* = python_c.PyObject_CallNoArgs(leviathan_loop.contextvars_copy.?)
                 orelse return error.PythonError;
         }else{
-            self.py_context = python_c.py_newref(py_ctx);
+            python_c.py_incref(py_ctx.*);
         }
     }else{
-        self.py_context = python_c.PyObject_CallNoArgs(leviathan_loop.contextvars_copy.?) orelse return error.PythonError;
+        context = python_c.PyObject_CallNoArgs(leviathan_loop.contextvars_copy.?) orelse return error.PythonError;
     }
-    errdefer python_c.py_decref_and_set_null(&self.py_context);
+    errdefer python_c.py_decref(context.?);
 
-    self.run_context = python_c.PyObject_GetAttrString(self.py_context.?, "run\x00") orelse return error.PythonError;
-    errdefer python_c.py_decref_and_set_null(&self.run_context);
-
-    Future.constructors.future_init_configuration(&self.fut, leviathan_loop);
-
-    const loop_data = utils.get_data_ptr(Loop, leviathan_loop);
-    const future_data = utils.get_data_ptr(Future, &self.fut);
-    errdefer future_data.release();
-
-    self.coro = python_c.py_newref(coro.?);
-    errdefer python_c.py_decref_and_set_null(&self.coro);
-
-    self.coro_send = coro_send;
-    self.coro_throw = coro_throw;
-
-    self.name = python_c.py_newref(name.?);
-    errdefer python_c.py_decref_and_set_null(&self.name);
-    
-    const mutex = &future_data.mutex;
-    mutex.lock();
-    defer mutex.unlock();
-
-    const callback: CallbackManager.Callback = .{
-        .PythonTask = .{
-            .task = self
+    if (name) |*v| {
+        if (python_c.PyUnicode_Check(v.*) == 0) {
+            v.* = python_c.PyObject_Str(v.*) orelse return error.PythonError;
+        }else{
+            v.* = python_c.py_newref(v.*);
         }
-    };
-
-    if (builtin.single_threaded) {
-        try loop_data.call_soon(callback);
-    }else{
-        try loop_data.call_soon_threadsafe(callback);
     }
-    python_c.py_incref(@ptrCast(self));
+    errdefer python_c.py_decref(name.?);
+
+    try task_init_configuration(self, leviathan_loop, coro.?, context.?, name);
+    errdefer { self.py_context = null; }
+
+    try task_schedule_coro(self, leviathan_loop);
 
     return 0;
 }

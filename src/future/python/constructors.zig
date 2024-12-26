@@ -52,7 +52,6 @@ inline fn z_future_new(
     _: ?PyObject
 ) !*PythonFutureObject {
     const instance: *PythonFutureObject = @ptrCast(@"type".tp_alloc.?(@"type", 0) orelse return error.PythonError);
-    errdefer @"type".tp_free.?(instance);
     future_set_initial_values(instance);
     return instance;
 }

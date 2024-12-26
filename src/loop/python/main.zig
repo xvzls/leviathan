@@ -6,8 +6,10 @@ const PyObject = *python_c.PyObject;
 const constructors = @import("constructors.zig");
 const scheduling = @import("scheduling.zig");
 const control = @import("control.zig");
+const utils = @import("utils/main.zig");
 
 const PythonLoopMethods: []const python_c.PyMethodDef = &[_]python_c.PyMethodDef{
+    // --------------------- Control ---------------------
     python_c.PyMethodDef{
         .ml_name = "run_forever\x00",
         .ml_meth = @ptrCast(&control.loop_run_forever),
@@ -38,12 +40,30 @@ const PythonLoopMethods: []const python_c.PyMethodDef = &[_]python_c.PyMethodDef
         .ml_doc = "Close the event loop\x00",
         .ml_flags = python_c.METH_NOARGS
     },
+
+    // --------------------- Sheduling ---------------------
     python_c.PyMethodDef{
         .ml_name = "call_soon\x00",
         .ml_meth = @ptrCast(&scheduling.loop_call_soon),
         .ml_doc = "Schedule callback to be called with args arguments at the next iteration of the event loop.\x00",
         .ml_flags = python_c.METH_FASTCALL | python_c.METH_KEYWORDS
     },
+
+    // --------------------- Utils ---------------------
+    python_c.PyMethodDef{
+        .ml_name = "create_future\x00",
+        .ml_meth = @ptrCast(&utils.future.loop_create_future),
+        .ml_doc = "Schedule callback to be called with args arguments at the next iteration of the event loop.\x00",
+        .ml_flags = python_c.METH_NOARGS
+    },
+    python_c.PyMethodDef{
+        .ml_name = "create_future\x00",
+        .ml_meth = @ptrCast(&utils.task.loop_create_task),
+        .ml_doc = "Schedule callback to be called with args arguments at the next iteration of the event loop.\x00",
+        .ml_flags = python_c.METH_NOARGS
+    },
+
+    // --------------------- Sentinel ---------------------
     python_c.PyMethodDef{
         .ml_name = null, .ml_meth = null, .ml_doc = null, .ml_flags = 0
     }
@@ -63,6 +83,8 @@ pub const PythonLoopObject = extern struct {
     contextvars_module: ?PyObject,
     contextvars_copy: ?PyObject,
     exception_handler: ?PyObject,
+
+    task_name_counter: usize
 };
 
 pub var PythonLoopType = python_c.PyTypeObject{

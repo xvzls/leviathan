@@ -27,6 +27,7 @@ class LeviathanTest(Command):
 		errno = subprocess.call([sys.executable, "-m", "pytest", "-s"])
 		raise SystemExit(errno)
 
+
 class ZigBuildCommand(build_ext):
 	def run(self) -> None:
 		subprocess.check_call(["zig", "build", "install", f"-Doptimize={zig_mode}"])
