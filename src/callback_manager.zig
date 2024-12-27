@@ -11,7 +11,8 @@ const LinkedList = @import("utils/linked_list.zig");
 pub const ExecuteCallbacksReturn = enum {
     Stop,
     Exception,
-    Continue
+    Continue,
+    None
 };
 
 pub const CallbackType = enum {
@@ -145,7 +146,7 @@ pub fn execute_callbacks(
     comptime can_restart: bool
 ) ExecuteCallbacksReturn {
     const queue = &sets_queue.queue;
-    var _node: ?LinkedList.Node = queue.first orelse return .Stop;
+    var _node: ?LinkedList.Node = queue.first orelse return .None;
     defer {
         if (can_restart) {
             sets_queue.last_set = queue.first;
@@ -160,7 +161,7 @@ pub fn execute_callbacks(
         const callbacks_num = callbacks_set.callbacks_num;
         if (callbacks_num == 0) {
             if (chunks_executed == 0) {
-                return .Stop;
+                return .None;
             }
             return status;
         }
@@ -173,7 +174,8 @@ pub fn execute_callbacks(
                 },
                 .Exception => {
                     status = .Exception;
-                }
+                },
+                else => unreachable
             }
         }
         callbacks_set.callbacks_num = 0;

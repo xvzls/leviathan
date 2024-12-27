@@ -16,14 +16,14 @@ def test_checking_subclassing_and_arguments(
     another_loop = asyncio.new_event_loop()
     loop = loop_obj()
     try:
-        coro = AsyncMock()
-        assert asyncio.isfuture(task_obj(coro(), loop=loop))
+        assert asyncio.isfuture(task_obj(AsyncMock()(), loop=loop))
+
+        coro = AsyncMock()()
+        with pytest.raises(TypeError):
+            task_obj(coro, loop=another_loop)
 
         with pytest.raises(TypeError):
-            task_obj(coro(), loop=another_loop)
-
-        with pytest.raises(TypeError):
-            task_obj(coro, loop=loop)
+            task_obj(None, loop=loop)  # type: ignore
     finally:
         loop.close()
 
@@ -130,7 +130,10 @@ def test_coro_running(
     try:
         coro = AsyncMock(return_value=42)
         task = task_obj(coro(), loop=loop)
+        loop.call_soon(loop.stop)
         loop.run_forever()
+
+        coro.assert_called_once()
         assert task.result() == 42
     finally:
         loop.close()

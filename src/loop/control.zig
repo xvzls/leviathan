@@ -9,7 +9,10 @@ const PyObject = *python_c.PyObject;
 
 const std = @import("std");
 
-inline fn free_callbacks_set(allocator: std.mem.Allocator, node: LinkedList.Node, comptime field_name: []const u8) LinkedList.Node {
+inline fn free_callbacks_set(
+    allocator: std.mem.Allocator, node: LinkedList.Node,
+    comptime field_name: []const u8
+) LinkedList.Node {
     const callbacks_set: *CallbackManager.CallbacksSet = @alignCast(@ptrCast(node.data.?));
     allocator.free(callbacks_set.callbacks);
     allocator.destroy(callbacks_set);
@@ -86,12 +89,7 @@ pub fn run_forever(self: *Loop) !void {
     }
 
     self.running = true;
-    self.stopping = false;
-
-    defer {
-        self.running = false;
-        self.stopping = false;
-    }
+    defer self.running = false;
 
     const ready_tasks_queues: []CallbackManager.CallbacksSetsQueue = &self.ready_tasks_queues;
     const max_callbacks_set_per_queue: []usize = &self.max_callbacks_sets_per_queue;
@@ -112,6 +110,7 @@ pub fn run_forever(self: *Loop) !void {
             .Continue => {},
             .Stop => break,
             .Exception => return error.PythonError,
+            .None => std.Thread.yield() catch std.atomic.spinLoopHint(),
         }
     }
 }

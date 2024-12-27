@@ -450,6 +450,7 @@ fn py_wake_up(
             utils.put_python_runtime_error_message("Stop signal received\x00");
             break :blk null;
         },
-        .Exception => null
+        .Exception => null,
+        else => unreachable
     };
 }

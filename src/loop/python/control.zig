@@ -10,6 +10,9 @@ const CallbackManager = @import("../../callback_manager.zig");
 
 const std = @import("std");
 
+// pub fn loop_run_until_complete(self: ?*PythonLoopObject, _: ?PyObject) callconv(.C) ?PyObject {
+    
+// }
 
 pub fn loop_run_forever(self: ?*PythonLoopObject, _: ?PyObject) callconv(.C) ?PyObject {
     const loop_data = utils.get_data_ptr(Loop, self.?);
@@ -17,7 +20,6 @@ pub fn loop_run_forever(self: ?*PythonLoopObject, _: ?PyObject) callconv(.C) ?Py
 
     return python_c.get_py_none();
 }
-
 
 pub fn loop_stop(self: ?*PythonLoopObject, _: ?PyObject) callconv(.C) ?PyObject {
     const loop_data = utils.get_data_ptr(Loop, self.?);

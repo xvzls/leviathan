@@ -1,8 +1,8 @@
 
 from leviathan import Loop, ThreadSafeLoop
 
-from contextvars import copy_context
-from unittest.mock import MagicMock, AsyncMock
+from contextvars import Context, copy_context
+from unittest.mock import AsyncMock
 from typing import Type
 
 import pytest, asyncio, random
@@ -23,21 +23,25 @@ def test_create_task(loop_obj: Type[asyncio.AbstractEventLoop]) -> None:
     loop = loop_obj()
     try:
         task = loop.create_task(mock_func())
+        loop.call_soon(loop.stop)
         loop.run_forever()
-        assert task.result() == 42
         mock_func.assert_called()
+        assert task.result() == 42
     finally:
         loop.close()
 
 
 @pytest.mark.parametrize("loop_obj", [Loop, ThreadSafeLoop])
 def test_create_task_with_context(loop_obj: Type[asyncio.AbstractEventLoop]) -> None:
-    mock_func = AsyncMock(return_value=42)
+    async def test_func(context: Context) -> bool:
+        return dict(context) == dict(copy_context())
+
     loop = loop_obj()
     try:
-        task = loop.create_task(mock_func())
+        context = copy_context()
+        task = loop.create_task(test_func(context), context=context)
+        loop.call_soon(loop.stop)
         loop.run_forever()
-        assert task.result() == 42
-        mock_func.assert_called()
+        assert task.result()
     finally:
         loop.close()
