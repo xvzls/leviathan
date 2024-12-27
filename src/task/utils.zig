@@ -82,16 +82,16 @@ pub fn task_get_stack(self: ?*Task.PythonTaskObject, args: ?PyObject, kwargs: ?P
     
     const base_tasks_module: PyObject = python_c.PyObject_GetAttrString(asyncio_module, "base_tasks\x00")
         orelse return null;
-    defer python_c.Py_DecRef(base_tasks_module);
+    defer python_c.py_decref(base_tasks_module);
 
     const get_stack_func: PyObject = python_c.PyObject_GetAttrString(base_tasks_module, "_task_get_stack\x00")
         orelse return null;
-    defer python_c.Py_DecRef(get_stack_func);
+    defer python_c.py_decref(get_stack_func);
 
     const stack: PyObject = python_c.PyObject_CallFunctionObjArgs(get_stack_func, instance, limit, @as(?PyObject, null))
         orelse return null;
 
-    return python_c.py_newref(stack);
+    return stack;
 }
 
 pub fn task_print_stack(self: ?*Task.PythonTaskObject, args: ?PyObject, kwargs: ?PyObject) callconv(.C) ?PyObject {
