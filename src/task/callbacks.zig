@@ -67,7 +67,7 @@ fn create_new_py_exception_and_add_event(
         orelse return error.PythonError;
     errdefer python_c.py_decref(exception);
 
-    const callback = .{
+    const callback: CallbackManager.Callback = .{
         .PythonTask = .{
             .task = task,
             .exc_value = exception

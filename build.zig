@@ -37,6 +37,11 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const python_include_dir = b.option([]const u8, "python-include-dir", "Path to python include directory")
+        orelse "/usr/include/python3.13";
+    const python_lib_dir = b.option([]const u8, "python-lib-dir", "Path to python library directory");
+
+
     const jdz_allocator = b.dependency("jdz_allocator", .{
         .target = target,
         .optimize = optimize
@@ -49,9 +54,15 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .link_libc = true
     });
+
     python_c_module.addIncludePath(.{
-        .cwd_relative = "/usr/include/python3.13"
+        .cwd_relative = python_include_dir
     });
+
+    if (python_lib_dir) |dir| {
+        python_c_module.addLibraryPath(b.path(dir));
+    }
+
     python_c_module.linkSystemLibrary("python3.13", .{});
 
     const leviathan_module = b.addModule("leviathan", .{

@@ -83,6 +83,8 @@ pub const PythonLoopObject = extern struct {
     contextvars_module: ?PyObject,
     contextvars_copy: ?PyObject,
     exception_handler: ?PyObject,
+
+    task_name_counter: u64,
 };
 
 pub var PythonLoopType = python_c.PyTypeObject{

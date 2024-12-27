@@ -4,6 +4,7 @@ const PyObject = *python_c.PyObject;
 const utils = @import("../utils/utils.zig");
 const Future = @import("../future/main.zig");
 const Task = @import("main.zig");
+const Loop = @import("../loop/main.zig");
 
 const std = @import("std");
 
@@ -24,23 +25,27 @@ pub fn task_get_context(self: ?*Task.PythonTaskObject) callconv(.C) ?PyObject {
 }
 
 pub fn task_get_name(self: ?*Task.PythonTaskObject) callconv(.C) ?PyObject {
-    if (self.?.name) |name| {
+    const instance = self.?;
+    if (instance.name) |name| {
         return python_c.py_newref(name);
     }
 
-    const allocator = utils.gpa.allocator();
-
-    const randprg = std.crypto.random;
-    const random_bytes = randprg.int(u64);
-    const random_str = std.fmt.allocPrint(allocator, "Leviathan.Task_{x:0>16}\x00", .{random_bytes}) catch |err| {
+    const loop = instance.fut.py_loop.?;
+    const loop_data = utils.get_data_ptr(Loop, loop);
+    const allocator = loop_data.allocator;
+    
+    const task_id = @atomicRmw(u64, &loop.task_name_counter, .Add, 1, .monotonic);
+    const random_str = std.fmt.allocPrint(allocator, "Leviathan.Task_{x:0>16}\x00", .{task_id}) catch |err| {
         utils.put_python_runtime_error_message(@errorName(err));
         return null;
     };
     defer allocator.free(random_str);
 
+    const py_name: PyObject = python_c.PyUnicode_FromStringAndSize(random_str.ptr, @intCast(random_str.len))
+        orelse return null;
+    instance.name = py_name;
 
-
-    return python_c.py_newref(self.?.name);
+    return python_c.py_newref(py_name);
 }
 
 pub fn task_set_name(self: ?*Task.PythonTaskObject, args: ?PyObject) callconv(.C) ?PyObject {
