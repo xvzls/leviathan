@@ -181,7 +181,7 @@ inline fn z_task_init(
     var context: ?PyObject = null;
 
     if (python_c.PyArg_ParseTupleAndKeywords(
-            args, kwargs, "OOO|O\x00", @ptrCast(&kwlist), &coro, &py_loop,
+            args, kwargs, "OO|$OO\x00", @ptrCast(&kwlist), &coro, &py_loop,
             &name, &context
         ) < 0) {
         return error.PythonError;
@@ -208,13 +208,18 @@ inline fn z_task_init(
     errdefer python_c.py_decref(context.?);
 
     if (name) |*v| {
-        if (python_c.PyUnicode_Check(v.*) == 0) {
+        if (python_c.Py_IsNone(v.*) != 0) {
+            python_c.py_decref_and_set_null(&name);
+        }else if (python_c.PyUnicode_Check(v.*) == 0) {
             v.* = python_c.PyObject_Str(v.*) orelse return error.PythonError;
         }else{
             v.* = python_c.py_newref(v.*);
         }
     }
-    errdefer python_c.py_decref(name.?);
+    errdefer python_c.py_xdecref(name);
+    
+    python_c.py_incref(coro.?);
+    errdefer python_c.py_decref(coro.?);
 
     try task_init_configuration(self, leviathan_loop, coro.?, context.?, name);
     errdefer { self.py_context = null; }
