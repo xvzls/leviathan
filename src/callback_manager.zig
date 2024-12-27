@@ -130,7 +130,10 @@ pub inline fn run_callback(
                     );
                 },
                 .PythonFuture => |data| Future.release_python_future_callback(data),
-                .PythonTask => |data| Task.release_python_task_callback(data.task, data.exc_value),
+                .PythonTask => |data| {
+                    data.task.must_cancel = true;
+                    _ = Task.step_run_and_handle_result(data.task, data.exc_value);
+                },
             }
             return .Continue;
         }

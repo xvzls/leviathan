@@ -329,7 +329,7 @@ inline fn failed_execution(task: *Task.PythonTaskObject) CallbackManager.Execute
     return .Continue;
 }
 
-pub inline fn release_python_task_callback(task: *Task.PythonTaskObject, exc_value: ?PyObject) void {
+inline fn release_python_task_callback(task: *Task.PythonTaskObject, exc_value: ?PyObject) void {
     python_c.py_decref(@ptrCast(task));
     python_c.py_xdecref(exc_value);
 }
@@ -357,7 +357,7 @@ pub fn step_run_and_handle_result(
             exception_value == null or
             python_c.PyObject_TypeCheck(exception_value.?, python_c.Py_TYPE(task.fut.cancelled_error_exc.?)) == 0
         ) {
-            python_c.py_decref(exception_value.?);
+            python_c.py_xdecref(exception_value);
             exception_value = blk: {
                 if (task.fut.cancel_msg_py_object) |value| {
                     break :blk python_c.PyObject_CallOneArg(
