@@ -1,9 +1,9 @@
 from leviathan import Task, ThreadSafeTask, Loop, ThreadSafeLoop
-from unittest.mock import MagicMock
 
 from contextvars import copy_context, Context
 from typing import Type, Any
-import pytest, asyncio
+import pytest, asyncio, io
+
 
 async def coro_test(*opt: Any, **kwargs: Any) -> tuple[Any, dict[str, Any]]:
     return opt, kwargs
@@ -49,12 +49,11 @@ def test_get_context(
 ) -> None:
     loop = loop_obj()
     try:
-        coro = coro_test()
-        task = task_obj(coro, loop=loop)
+        task = task_obj(coro_test(), loop=loop)
         assert type(task.get_context()) is Context
 
         ctx = copy_context()
-        task = task_obj(coro, loop=loop, context=ctx)
+        task = task_obj(coro_test(), loop=loop, context=ctx)
         assert task.get_context() is ctx
     finally:
         loop.close()
@@ -85,8 +84,10 @@ def test_name(
 ) -> None:
     loop = loop_obj()
     try:
-        coro = coro_test()
-        task = task_obj(coro, loop=loop, name="test")
+        task = task_obj(coro_test(), loop=loop)
+        assert task.get_name()
+
+        task = task_obj(coro_test(), loop=loop, name="test")
         assert task.get_name() == "test"
 
         task.set_name("test2")
@@ -96,6 +97,7 @@ def test_name(
         assert task.get_name() == "23"
     finally:
         loop.close()
+
 
 @pytest.mark.parametrize("task_obj, loop_obj", [
     (Task, Loop),
@@ -108,6 +110,8 @@ def test_stack(
     try:
         coro = coro_test()
         task = task_obj(coro, loop=loop)
-        task.print_stack()
+        with io.StringIO() as buf:
+            task.print_stack(file=buf)
+            assert buf.getvalue()
     finally:
         loop.close()
