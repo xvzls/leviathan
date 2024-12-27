@@ -2,7 +2,6 @@ from .leviathan_zig_single_thread import Task as _TaskSingleThread
 from .leviathan_zig import Task as _Task
 
 from typing import TypeVar, Coroutine, Optional, Any
-from time import time
 import asyncio
 
 T = TypeVar('T')
@@ -17,12 +16,7 @@ class Task(_TaskSingleThread):
         if loop is None:
             loop = asyncio.get_running_loop()
 
-        if name is None:
-            name = f"Task-{int(time() * 1000)}"
-        else:
-            name = str(name)
-
-        _TaskSingleThread.__init__(self, coro, loop, name, context)
+        _TaskSingleThread.__init__(self, coro, loop, name=name, context=context)
 
 
 class ThreadSafeTask(_Task):
@@ -34,9 +28,4 @@ class ThreadSafeTask(_Task):
         if loop is None:
             loop = asyncio.get_running_loop()
 
-        if name is None:
-            name = f"Task-{int(time() * 1000)}"
-        else:
-            name = str(name)
-
-        _Task.__init__(self, coro, loop, name, context)
+        _Task.__init__(self, coro, loop, name=name, context=context)
