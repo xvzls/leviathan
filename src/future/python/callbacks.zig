@@ -4,7 +4,8 @@ const python_c = @import("python_c");
 const PyObject = *python_c.PyObject;
 
 const Future = @import("../main.zig");
-const PythonFutureObject = Future.PythonFutureObject;
+const Loop = @import("../../loop/main.zig");
+const PythonFutureObject = Future.FutureObject;
 
 const CallbackManager = @import("../../callback_manager.zig");
 
@@ -64,11 +65,7 @@ inline fn z_future_add_done_callback(self: *PythonFutureObject, args: PyObject) 
             errdefer python_c.py_decref(@ptrCast(self));
 
             callback_data.PythonFuture.dec_future = true;
-            if (builtin.single_threaded) {
-                try future_data.loop.call_soon(callback_data);
-            }else{
-                try future_data.loop.call_soon_threadsafe(callback_data);
-            }
+            try Loop.Scheduling.Soon.dispatch(future_data.loop, callback_data);
         }
     }
 

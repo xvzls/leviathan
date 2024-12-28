@@ -4,24 +4,24 @@ const PyObject = *python_c.PyObject;
 const utils = @import("../../utils/utils.zig");
 
 const Loop = @import("../main.zig");
-const PythonLoopObject = Loop.PythonLoopObject;
+const LoopObject = Loop.Python.LoopObject;
 
 const CallbackManager = @import("../../callback_manager.zig");
 
 const std = @import("std");
 
-// pub fn loop_run_until_complete(self: ?*PythonLoopObject, _: ?PyObject) callconv(.C) ?PyObject {
+// pub fn loop_run_until_complete(self: ?*LoopObject, _: ?PyObject) callconv(.C) ?PyObject {
     
 // }
 
-pub fn loop_run_forever(self: ?*PythonLoopObject, _: ?PyObject) callconv(.C) ?PyObject {
+pub fn loop_run_forever(self: ?*LoopObject, _: ?PyObject) callconv(.C) ?PyObject {
     const loop_data = utils.get_data_ptr(Loop, self.?);
-    loop_data.run_forever() catch return null;
+    Loop.Runner.start(loop_data) catch return null;
 
     return python_c.get_py_none();
 }
 
-pub fn loop_stop(self: ?*PythonLoopObject, _: ?PyObject) callconv(.C) ?PyObject {
+pub fn loop_stop(self: ?*LoopObject, _: ?PyObject) callconv(.C) ?PyObject {
     const loop_data = utils.get_data_ptr(Loop, self.?);
 
     const mutex = &loop_data.mutex;
@@ -32,7 +32,7 @@ pub fn loop_stop(self: ?*PythonLoopObject, _: ?PyObject) callconv(.C) ?PyObject 
     return python_c.get_py_none();
 }
 
-pub fn loop_is_running(self: ?*PythonLoopObject, _: ?PyObject) callconv(.C) ?PyObject {
+pub fn loop_is_running(self: ?*LoopObject, _: ?PyObject) callconv(.C) ?PyObject {
     const loop_data = utils.get_data_ptr(Loop, self.?);
     const mutex = &loop_data.mutex;
     mutex.lock();
@@ -41,7 +41,7 @@ pub fn loop_is_running(self: ?*PythonLoopObject, _: ?PyObject) callconv(.C) ?PyO
     return python_c.PyBool_FromLong(@intCast(@intFromBool(loop_data.running)));
 }
 
-pub fn loop_is_closed(self: ?*PythonLoopObject, _: ?PyObject) callconv(.C) ?PyObject {
+pub fn loop_is_closed(self: ?*LoopObject, _: ?PyObject) callconv(.C) ?PyObject {
     const loop_data = utils.get_data_ptr(Loop, self.?);
 
     const mutex = &loop_data.mutex;
@@ -51,7 +51,7 @@ pub fn loop_is_closed(self: ?*PythonLoopObject, _: ?PyObject) callconv(.C) ?PyOb
     return python_c.PyBool_FromLong(@intCast(@intFromBool(loop_data.closed)));
 }
 
-pub fn loop_close(self: ?*PythonLoopObject, _: ?PyObject) callconv(.C) ?PyObject {
+pub fn loop_close(self: ?*LoopObject, _: ?PyObject) callconv(.C) ?PyObject {
     const loop_data = utils.get_data_ptr(Loop, self.?);
 
     const mutex = &loop_data.mutex;

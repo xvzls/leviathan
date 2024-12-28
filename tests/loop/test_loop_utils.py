@@ -5,7 +5,7 @@ from contextvars import Context, copy_context
 from unittest.mock import AsyncMock
 from typing import Type
 
-import pytest, asyncio, random
+import pytest, asyncio
 
 
 @pytest.mark.parametrize("loop_obj", [Loop, ThreadSafeLoop])

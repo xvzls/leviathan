@@ -7,7 +7,8 @@ const result = @import("result.zig");
 const Future = @import("../main.zig");
 const Loop = @import("../../loop/main.zig");
 
-const PythonFutureObject = Future.PythonFutureObject;
+const LoopObject = Loop.Python.LoopObject;
+const PythonFutureObject = Future.FutureObject;
 
 const std = @import("std");
 
@@ -26,7 +27,7 @@ pub inline fn future_set_initial_values(self: *PythonFutureObject) void {
     self.blocking = 0;
 }
 
-pub inline fn future_init_configuration(self: *PythonFutureObject, leviathan_loop: *Loop.PythonLoopObject) void {
+pub inline fn future_init_configuration(self: *PythonFutureObject, leviathan_loop: *LoopObject) void {
     const loop_data = utils.get_data_ptr(Loop, leviathan_loop);
     const future_data = utils.get_data_ptr(Future, self);
     future_data.init(loop_data);
@@ -37,7 +38,7 @@ pub inline fn future_init_configuration(self: *PythonFutureObject, leviathan_loo
     self.cancelled_error_exc = leviathan_loop.cancelled_error_exc.?;
 }
 
-pub inline fn fast_new_future(leviathan_loop: *Loop.PythonLoopObject) !*PythonFutureObject {
+pub inline fn fast_new_future(leviathan_loop: *LoopObject) !*PythonFutureObject {
     const instance: *PythonFutureObject = @ptrCast(
         Future.PythonFutureType.tp_alloc.?(&Future.PythonFutureType, 0) orelse return error.PythonError
     );
@@ -119,8 +120,8 @@ inline fn z_future_init(
         return error.PythonError;
     }
 
-    const leviathan_loop: *Loop.PythonLoopObject = @ptrCast(py_loop.?);
-    if (python_c.PyObject_TypeCheck(@ptrCast(leviathan_loop), &Loop.PythonLoopType) == 0) {
+    const leviathan_loop: *LoopObject = @ptrCast(py_loop.?);
+    if (python_c.PyObject_TypeCheck(@ptrCast(leviathan_loop), &Loop.Python.LoopType) == 0) {
         python_c.PyErr_SetString(
             python_c.PyExc_TypeError, "Invalid asyncio event loop. Only Leviathan's event loops are allowed\x00"
         );
@@ -137,7 +138,7 @@ pub fn future_init(
     return utils.execute_zig_function(z_future_init, .{self.?, args, kwargs});
 }
 
-pub fn future_get_loop(self: ?*PythonFutureObject) callconv(.C) ?*Loop.PythonLoopObject {
+pub fn future_get_loop(self: ?*PythonFutureObject) callconv(.C) ?*LoopObject {
     return python_c.py_newref(self.?.py_loop);
 }
 

@@ -92,7 +92,7 @@ const PythonTaskMembers: []const python_c.PyMemberDef = &[_]python_c.PyMemberDef
     python_c.PyMemberDef{
         .name = "_exception\x00",
         .type = python_c._Py_T_OBJECT,
-        .offset = @offsetOf(Future.PythonFutureObject, "exception"),
+        .offset = @offsetOf(Future.FutureObject, "exception"),
         .doc = null,
         .flags = python_c.Py_READONLY
     },
@@ -109,7 +109,7 @@ const PythonTaskMembers: []const python_c.PyMemberDef = &[_]python_c.PyMemberDef
 };
 
 pub const PythonTaskObject = extern struct {
-    fut: Future.PythonFutureObject,
+    fut: Future.FutureObject,
 
     py_context: ?PyObject,
     run_context: ?PyObject,

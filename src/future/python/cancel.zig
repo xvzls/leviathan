@@ -4,7 +4,7 @@ const python_c = @import("python_c");
 const PyObject = *python_c.PyObject;
 
 const Future = @import("../main.zig");
-const PythonFutureObject = Future.PythonFutureObject;
+const PythonFutureObject = Future.FutureObject;
 
 const utils = @import("../../utils/utils.zig");
 

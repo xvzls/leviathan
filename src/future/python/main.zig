@@ -75,7 +75,7 @@ const PythonFutureMethods: []const python_c.PyMethodDef = &[_]python_c.PyMethodD
     }
 };
 
-pub const PythonFutureObject = extern struct {
+pub const FutureObject = extern struct {
     ob_base: python_c.PyObject,
     data: [@sizeOf(Future)]u8,
 
@@ -83,7 +83,7 @@ pub const PythonFutureObject = extern struct {
     invalid_state_exc: ?PyObject,
     cancelled_error_exc: ?PyObject,
 
-    py_loop: ?*Loop.PythonLoopObject,
+    py_loop: ?*Loop.Python.LoopObject,
     exception: ?PyObject,
     exception_tb: ?PyObject,
 
@@ -95,7 +95,7 @@ const PythonFutureMembers: []const python_c.PyMemberDef = &[_]python_c.PyMemberD
     python_c.PyMemberDef{ // Just for be supported by asyncio.isfuture
         .name = "_asyncio_future_blocking\x00",
         .type = python_c.Py_T_BOOL,
-        .offset = @offsetOf(PythonFutureObject, "blocking"),
+        .offset = @offsetOf(FutureObject, "blocking"),
         .doc = null,
     },
     python_c.PyMemberDef{
@@ -110,7 +110,7 @@ const PythonFutureAsyncMethods = python_c.PyAsyncMethods{
 pub var PythonFutureType = python_c.PyTypeObject{
     .tp_name = "leviathan.Future\x00",
     .tp_doc = "Leviathan's future class\x00",
-    .tp_basicsize = @sizeOf(PythonFutureObject),
+    .tp_basicsize = @sizeOf(FutureObject),
     .tp_itemsize = 0,
     .tp_flags = python_c.Py_TPFLAGS_DEFAULT | python_c.Py_TPFLAGS_BASETYPE | python_c.Py_TPFLAGS_HAVE_GC,
     .tp_new = &constructors.future_new,

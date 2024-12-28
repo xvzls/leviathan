@@ -10,7 +10,6 @@ const Future = @import("../future/main.zig");
 const Loop = @import("../loop/main.zig");
 
 const std = @import("std");
-const builtin = @import("builtin");
 
 pub const TaskCallbackData = struct {
     task: *Task.PythonTaskObject,
@@ -74,11 +73,7 @@ fn create_new_py_exception_and_add_event(
         }
     };
 
-    if (builtin.single_threaded) {
-        try loop.call_soon(callback);
-    }else{
-        try loop.call_soon_threadsafe(callback);
-    }
+    try Loop.Scheduling.Soon.dispatch(loop, callback);
     python_c.py_incref(@ptrCast(task));
 } 
 
@@ -98,7 +93,7 @@ inline fn execute_zig_function(
 inline fn cancel_future_object(
     task: *Task.PythonTaskObject, future: anytype
 ) CallbackManager.ExecuteCallbacksReturn {
-    if (@TypeOf(future) == *Future.PythonFutureObject) {
+    if (@TypeOf(future) == *Future.FutureObject) {
         if (!Future.cancel.future_fast_cancel(future, task.fut.cancel_msg_py_object)) {
             return .Exception;
         }
@@ -183,7 +178,7 @@ inline fn handle_legacy_future_object(
 
 inline fn handle_leviathan_future_object(
     task: *Task.PythonTaskObject,
-    future: *Future.PythonFutureObject
+    future: *Future.FutureObject
 ) CallbackManager.ExecuteCallbacksReturn {
     const loop_data = utils.get_data_ptr(Loop, task.fut.py_loop.?);
     const allocator = loop_data.allocator;
@@ -258,17 +253,11 @@ inline fn successfully_execution(
                 .task = task
             }
         };
-        if (builtin.single_threaded) {
-            loop_data.call_soon(callback) catch |err| {
-                utils.put_python_runtime_error_message(@errorName(err));
-                return .Exception;
-            };
-        }else{
-            loop_data.call_soon_threadsafe(callback) catch |err| {
-                utils.put_python_runtime_error_message(@errorName(err));
-                return .Exception;
-            };
-        }
+
+        Loop.Scheduling.Soon.dispatch(loop_data, callback) catch |err| {
+            utils.put_python_runtime_error_message(@errorName(err));
+            return .Exception;
+        };
 
         python_c.py_incref(@ptrCast(task));
         return .Continue;
@@ -280,7 +269,7 @@ inline fn successfully_execution(
 inline fn failed_execution(task: *Task.PythonTaskObject) CallbackManager.ExecuteCallbacksReturn {
     const exc_match = python_c.PyErr_GivenExceptionMatches;
 
-    const fut: *Future.PythonFutureObject = &task.fut;
+    const fut: *Future.FutureObject = &task.fut;
     const future_data = utils.get_data_ptr(Future, fut);
     const exception: PyObject = python_c.PyErr_GetRaisedException() orelse return .Exception;
     defer python_c.py_decref(exception);
@@ -418,7 +407,7 @@ fn wakeup_task(
     defer python_c.py_decref(py_future);
 
     if (python_c.PyObject_TypeCheck(py_future, &Future.PythonFutureType) != 0) {
-        const leviathan_fut: *Future.PythonFutureObject = @alignCast(@ptrCast(py_future));
+        const leviathan_fut: *Future.FutureObject = @alignCast(@ptrCast(py_future));
         if (leviathan_fut.exception) |exception| {
             exc_value = python_c.py_newref(exception);
         }

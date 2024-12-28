@@ -6,8 +6,9 @@ const utils = @import("../utils/utils.zig");
 const CallbackManager = @import("../callback_manager.zig");
 const Future = @import("../future/main.zig");
 const Loop = @import("../loop/main.zig");
-
 const Task = @import("main.zig");
+
+const LoopObject = Loop.Python.LoopObject;
 const PythonTaskObject = Task.PythonTaskObject;
 
 const std = @import("std");
@@ -27,7 +28,7 @@ inline fn task_set_initial_values(self: *PythonTaskObject) void {
 }
 
 inline fn task_init_configuration(
-    self: *PythonTaskObject, loop: *Loop.PythonLoopObject,
+    self: *PythonTaskObject, loop: *LoopObject,
     coro: PyObject, context: PyObject, name: ?PyObject
 ) !void {
     Future.constructors.future_init_configuration(&self.fut, loop);
@@ -55,7 +56,7 @@ inline fn task_init_configuration(
     self.py_context = context;
 }
 
-inline fn task_schedule_coro(self: *PythonTaskObject, loop: *Loop.PythonLoopObject) !void {
+inline fn task_schedule_coro(self: *PythonTaskObject, loop: *LoopObject) !void {
     const loop_data = utils.get_data_ptr(Loop, loop);
 
     const callback: CallbackManager.Callback = .{
@@ -64,16 +65,12 @@ inline fn task_schedule_coro(self: *PythonTaskObject, loop: *Loop.PythonLoopObje
         }
     };
 
-    if (builtin.single_threaded) {
-        try loop_data.call_soon(callback);
-    }else{
-        try loop_data.call_soon_threadsafe(callback);
-    }
+    try Loop.Scheduling.Soon.dispatch(loop_data, callback);
     python_c.py_incref(@ptrCast(self));
 }
 
 pub inline fn fast_new_task(
-    loop: *Loop.PythonLoopObject, coro: PyObject,
+    loop: *LoopObject, coro: PyObject,
     context: PyObject, name: ?PyObject
 ) !*PythonTaskObject {
     const instance: *PythonTaskObject = @ptrCast(
@@ -189,8 +186,8 @@ inline fn z_task_init(
         return error.PythonError;
     }
 
-    const leviathan_loop: *Loop.PythonLoopObject = @ptrCast(py_loop.?);
-    if (python_c.PyObject_TypeCheck(@ptrCast(leviathan_loop), &Loop.PythonLoopType) == 0) {
+    const leviathan_loop: *LoopObject = @ptrCast(py_loop.?);
+    if (python_c.PyObject_TypeCheck(@ptrCast(leviathan_loop), &Loop.Python.LoopType) == 0) {
         python_c.PyErr_SetString(
             python_c.PyExc_TypeError, "Invalid asyncio event loop. Only Leviathan's event loops are allowed\x00"
         );

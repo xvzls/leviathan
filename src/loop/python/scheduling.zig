@@ -3,14 +3,15 @@ const PyObject = *python_c.PyObject;
 
 const utils = @import("../../utils/utils.zig");
 
+const CallbackManager = @import("../../callback_manager.zig");
 const Loop = @import("../main.zig");
 const Handle = @import("../../handle.zig");
 
-const PythonLoopObject = Loop.PythonLoopObject;
+const LoopObject = Loop.Python.LoopObject;
 
 const std = @import("std");
 
-inline fn get_py_context(knames: ?PyObject, args_ptr: [*]?PyObject, loop: *PythonLoopObject) !PyObject {
+inline fn get_py_context(knames: ?PyObject, args_ptr: [*]?PyObject, loop: *LoopObject) !PyObject {
     var context: ?PyObject = null;
     if (knames) |kwargs| {
         const kwargs_len = python_c.PyTuple_Size(kwargs);
@@ -62,7 +63,7 @@ inline fn get_callback_info(allocator: std.mem.Allocator, args: []?PyObject) ![]
 }
 
 inline fn z_loop_call_soon(
-    self: *PythonLoopObject, args: []?PyObject,
+    self: *LoopObject, args: []?PyObject,
     knames: ?PyObject
 ) !*Handle.PythonHandleObject {
     const context = try get_py_context(knames, args.ptr + args.len, self);
@@ -100,7 +101,7 @@ inline fn z_loop_call_soon(
         return error.PythonError;
     }
 
-    try loop_data.call_soon(.{
+    const callback: CallbackManager.Callback = .{
         .PythonGeneric = .{
             .args = callback_info,
             .exception_handler = self.exception_handler.?,
@@ -108,12 +109,13 @@ inline fn z_loop_call_soon(
             .py_handle = py_handle,
             .cancelled = &py_handle.cancelled
         }
-    });
+    };
+    try Loop.Scheduling.Soon._dispatch(loop_data, callback);
     return python_c.py_newref(py_handle);
 }
 
 pub fn loop_call_soon(
-    self: ?*PythonLoopObject, args: ?[*]?PyObject, nargs: isize, knames: ?PyObject
+    self: ?*LoopObject, args: ?[*]?PyObject, nargs: isize, knames: ?PyObject
 ) callconv(.C) ?*Handle.PythonHandleObject {
     return utils.execute_zig_function(z_loop_call_soon, .{
         self.?, args.?[0..@as(usize, @intCast(nargs))], knames

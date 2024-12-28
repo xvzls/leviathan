@@ -84,8 +84,8 @@ pub fn release(self: *Loop) void {
     self.released = true;
 }
 
-pub usingnamespace @import("control.zig");
-pub usingnamespace @import("scheduling.zig");
-pub usingnamespace @import("python/main.zig");
+pub const Runner = @import("runner.zig");
+pub const Scheduling = @import("scheduling/main.zig");
+pub const Python = @import("python/main.zig");
 
 const Loop = @This();

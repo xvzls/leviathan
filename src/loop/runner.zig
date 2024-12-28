@@ -68,7 +68,7 @@ inline fn call_once(
     return ret;
 }
 
-pub fn run_forever(self: *Loop) !void {
+pub fn start(self: *Loop) !void {
     const mutex = &self.mutex;
     mutex.lock();
     defer mutex.unlock();

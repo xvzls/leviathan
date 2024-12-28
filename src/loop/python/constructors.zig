@@ -4,13 +4,13 @@ const PyObject = *python_c.PyObject;
 const utils = @import("../../utils/utils.zig");
 
 const Loop = @import("../main.zig");
-const PythonLoopObject = Loop.PythonLoopObject;
+const LoopObject = Loop.Python.LoopObject;
 
 inline fn z_loop_new(
     @"type": *python_c.PyTypeObject, _: ?PyObject,
     _: ?PyObject
-) !*PythonLoopObject {
-    const instance: *PythonLoopObject = @ptrCast(@"type".tp_alloc.?(@"type", 0) orelse return error.PythonError);
+) !*LoopObject {
+    const instance: *LoopObject = @ptrCast(@"type".tp_alloc.?(@"type", 0) orelse return error.PythonError);
     errdefer @"type".tp_free.?(instance);
 
     const contextvars_module: PyObject = python_c.PyImport_ImportModule("contextvars\x00")
@@ -67,7 +67,7 @@ pub fn loop_new(
     return @ptrCast(self);
 }
 
-pub fn loop_clear(self: ?*PythonLoopObject) callconv(.C) c_int {
+pub fn loop_clear(self: ?*LoopObject) callconv(.C) c_int {
     const py_loop = self.?;
     const loop_data = utils.get_data_ptr(Loop, py_loop);
     if (!loop_data.released) {
@@ -85,7 +85,7 @@ pub fn loop_clear(self: ?*PythonLoopObject) callconv(.C) c_int {
     return 0;
 }
 
-pub fn loop_traverse(self: ?*PythonLoopObject, visit: python_c.visitproc, arg: ?*anyopaque) callconv(.C) c_int {
+pub fn loop_traverse(self: ?*LoopObject, visit: python_c.visitproc, arg: ?*anyopaque) callconv(.C) c_int {
     const instance = self.?;
     return python_c.py_visit(
         &[_]?*python_c.PyObject{
@@ -99,7 +99,7 @@ pub fn loop_traverse(self: ?*PythonLoopObject, visit: python_c.visitproc, arg: ?
     );
 }
 
-pub fn loop_dealloc(self: ?*PythonLoopObject) callconv(.C) void {
+pub fn loop_dealloc(self: ?*LoopObject) callconv(.C) void {
     const instance = self.?;
 
     python_c.PyObject_GC_UnTrack(instance);
@@ -110,7 +110,7 @@ pub fn loop_dealloc(self: ?*PythonLoopObject) callconv(.C) void {
 }
 
 inline fn z_loop_init(
-    self: *PythonLoopObject, args: ?PyObject, kwargs: ?PyObject
+    self: *LoopObject, args: ?PyObject, kwargs: ?PyObject
 ) !c_int {
     var kwlist: [4][*c]u8 = undefined;
     kwlist[0] = @constCast("ready_tasks_queue_min_bytes_capacity\x00");
@@ -143,7 +143,7 @@ inline fn z_loop_init(
 }
 
 pub fn loop_init(
-    self: ?*PythonLoopObject, args: ?PyObject, kwargs: ?PyObject
+    self: ?*LoopObject, args: ?PyObject, kwargs: ?PyObject
 ) callconv(.C) c_int {
     return utils.execute_zig_function(z_loop_init, .{self.?, args, kwargs});
 }

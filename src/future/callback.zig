@@ -1,7 +1,7 @@
 const std = @import("std");
-const builtin = @import("builtin");
 
 const CallbackManager = @import("../callback_manager.zig");
+const Loop = @import("../loop/main.zig");
 const Future = @import("main.zig");
 
 const BTree = @import("../utils/btree/btree.zig");
@@ -15,7 +15,7 @@ const MaxCallbacks = 8;
 
 pub const FutureCallbacksSetData = struct {
     sets_queue: *CallbackManager.CallbacksSetsQueue,
-    future: *Future.PythonFutureObject,
+    future: *Future.FutureObject,
 };
 
 pub const FutureCallbackData = struct {
@@ -137,7 +137,7 @@ pub inline fn call_done_callbacks(self: *Future, new_status: Future.FutureStatus
         return;
     }
 
-    const pyfut = utils.get_parent_ptr(Future.PythonFutureObject, self);
+    const pyfut = utils.get_parent_ptr(Future.FutureObject, self);
     python_c.py_incref(@ptrCast(pyfut));
     errdefer python_c.py_decref(@ptrCast(pyfut));
 
@@ -148,11 +148,6 @@ pub inline fn call_done_callbacks(self: *Future, new_status: Future.FutureStatus
         }
     };
 
-    if (builtin.single_threaded) {
-        try self.loop.call_soon(callback);
-    }else{
-        try self.loop.call_soon_threadsafe(callback);
-    }
-
+    try Loop.Scheduling.Soon.dispatch(self.loop, callback);
     self.status = new_status;
 }

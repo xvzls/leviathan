@@ -69,7 +69,7 @@ const PythonLoopMethods: []const python_c.PyMethodDef = &[_]python_c.PyMethodDef
     }
 };
 
-pub const PythonLoopObject = extern struct {
+pub const LoopObject = extern struct {
     ob_base: python_c.PyObject,
     data: [@sizeOf(Loop)]u8,
 
@@ -87,10 +87,10 @@ pub const PythonLoopObject = extern struct {
     task_name_counter: u64,
 };
 
-pub var PythonLoopType = python_c.PyTypeObject{
+pub var LoopType = python_c.PyTypeObject{
     .tp_name = "leviathan.Loop\x00",
     .tp_doc = "Leviathan's loop class\x00",
-    .tp_basicsize = @sizeOf(PythonLoopObject),
+    .tp_basicsize = @sizeOf(LoopObject),
     .tp_itemsize = 0,
     .tp_flags = python_c.Py_TPFLAGS_DEFAULT | python_c.Py_TPFLAGS_BASETYPE | python_c.Py_TPFLAGS_HAVE_GC,
     .tp_new = &constructors.loop_new,
