@@ -3,76 +3,75 @@ const Future = @import("../future/main.zig");
 const python_c = @import("python_c");
 const PyObject = *python_c.PyObject;
 
-pub const constructors = @import("constructors.zig");
-const task_utils = @import("utils.zig");
-pub const cancel = @import("cancel.zig");
-
-pub usingnamespace @import("callbacks.zig");
+pub const Constructors = @import("constructors.zig");
+const Utils = @import("utils.zig");
+pub const Cancel = @import("cancel.zig");
+pub const Callback = @import("callbacks.zig");
 
 const PythonTaskMethods: []const python_c.PyMethodDef = &[_]python_c.PyMethodDef{
     python_c.PyMethodDef{
         .ml_name = "set_result\x00",
-        .ml_meth = @ptrCast(&task_utils.task_not_implemented_method),
+        .ml_meth = @ptrCast(&Utils.task_not_implemented_method),
         .ml_doc = "Mark the Future as done and set its result.\x00",
         .ml_flags = python_c.METH_VARARGS
     },
     python_c.PyMethodDef{
         .ml_name = "set_exception\x00",
-        .ml_meth = @ptrCast(&task_utils.task_not_implemented_method),
+        .ml_meth = @ptrCast(&Utils.task_not_implemented_method),
         .ml_doc = "Mark the Future as done and set its exception.\x00",
         .ml_flags = python_c.METH_VARARGS
     },
     python_c.PyMethodDef{
         .ml_name = "cancel\x00",
-        .ml_meth = @ptrCast(&cancel.task_cancel),
+        .ml_meth = @ptrCast(&Cancel.task_cancel),
         .ml_doc = "Cancel the Future and schedule callbacks.\x00",
         .ml_flags = python_c.METH_VARARGS | python_c.METH_KEYWORDS
     },
     python_c.PyMethodDef{
         .ml_name = "uncancel\x00",
-        .ml_meth = @ptrCast(&cancel.task_uncancel),
+        .ml_meth = @ptrCast(&Cancel.task_uncancel),
         .ml_doc = "Decrement the number of pending cancellation requests to this Task\x00",
         .ml_flags = python_c.METH_NOARGS
     },
     python_c.PyMethodDef{
         .ml_name = "cancelling\x00",
-        .ml_meth = @ptrCast(&cancel.task_cancelling),
+        .ml_meth = @ptrCast(&Cancel.task_cancelling),
         .ml_doc = "Return the number of pending cancellation requests to this Task.\x00",
         .ml_flags = python_c.METH_NOARGS
     },
     python_c.PyMethodDef{
         .ml_name = "get_coro\x00",
-        .ml_meth = @ptrCast(&task_utils.task_get_coro),
+        .ml_meth = @ptrCast(&Utils.task_get_coro),
         .ml_doc = "Return the coroutine object wrapped by the Task.\x00",
         .ml_flags = python_c.METH_NOARGS
     },
     python_c.PyMethodDef{
         .ml_name = "get_context\x00",
-        .ml_meth = @ptrCast(&task_utils.task_get_context),
+        .ml_meth = @ptrCast(&Utils.task_get_context),
         .ml_doc = "Return the contextvars.Context object associated with the task.\x00",
         .ml_flags = python_c.METH_NOARGS
     },
     python_c.PyMethodDef{
         .ml_name = "get_name\x00",
-        .ml_meth = @ptrCast(&task_utils.task_get_name),
+        .ml_meth = @ptrCast(&Utils.task_get_name),
         .ml_doc = "Return the name of the task.\x00",
         .ml_flags = python_c.METH_NOARGS
     },
     python_c.PyMethodDef{
         .ml_name = "set_name\x00",
-        .ml_meth = @ptrCast(&task_utils.task_set_name),
+        .ml_meth = @ptrCast(&Utils.task_set_name),
         .ml_doc = "Set the name of the task\x00",
         .ml_flags = python_c.METH_VARARGS
     },
     python_c.PyMethodDef{
         .ml_name = "get_stack\x00",
-        .ml_meth = @ptrCast(&task_utils.task_get_stack),
+        .ml_meth = @ptrCast(&Utils.task_get_stack),
         .ml_doc = "Return the list of stack frames for this Task.\x00",
         .ml_flags = python_c.METH_VARARGS | python_c.METH_KEYWORDS
     },
     python_c.PyMethodDef{
         .ml_name = "print_stack\x00",
-        .ml_meth = @ptrCast(&task_utils.task_print_stack),
+        .ml_meth = @ptrCast(&Utils.task_print_stack),
         .ml_doc = "Print the stack or traceback for this Task.",
         .ml_flags = python_c.METH_VARARGS | python_c.METH_KEYWORDS
     },
@@ -132,11 +131,11 @@ pub var PythonTaskType = python_c.PyTypeObject{
     .tp_basicsize = @sizeOf(PythonTaskObject),
     .tp_itemsize = 0,
     .tp_flags = python_c.Py_TPFLAGS_DEFAULT | python_c.Py_TPFLAGS_BASETYPE | python_c.Py_TPFLAGS_HAVE_GC,
-    .tp_new = &constructors.task_new,
-    .tp_init = @ptrCast(&constructors.task_init),
-    .tp_traverse = @ptrCast(&constructors.task_traverse),
-    .tp_clear = @ptrCast(&constructors.task_clear),
-    .tp_dealloc = @ptrCast(&constructors.task_dealloc),
+    .tp_new = &Constructors.task_new,
+    .tp_init = @ptrCast(&Constructors.task_init),
+    .tp_traverse = @ptrCast(&Constructors.task_traverse),
+    .tp_clear = @ptrCast(&Constructors.task_clear),
+    .tp_dealloc = @ptrCast(&Constructors.task_dealloc),
     .tp_methods = @constCast(PythonTaskMethods.ptr),
     .tp_members = @constCast(PythonTaskMembers.ptr)
 };

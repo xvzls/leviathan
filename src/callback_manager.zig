@@ -29,9 +29,9 @@ pub const ZigGenericCallbackData = struct {
 pub const Callback = union(CallbackType) {
     ZigGeneric: ZigGenericCallbackData,
     PythonGeneric: Handle.GenericCallbackData,
-    PythonFutureCallbacksSet: Future.Callback.FutureCallbacksSetData,
-    PythonFuture: Future.Callback.FutureCallbackData,
-    PythonTask: Task.TaskCallbackData
+    PythonFutureCallbacksSet: Future.Callback.CallbacksSetData,
+    PythonFuture: Future.Callback.Data,
+    PythonTask: Task.Callback.Data
 };
 
 pub const CallbacksSet = struct {
@@ -116,7 +116,7 @@ pub inline fn run_callback(
                     allocator, data, status
                 ),
                 .PythonFuture => |data| Future.Callback.callback_for_python_future_callbacks(data),
-                .PythonTask => |data| Task.step_run_and_handle_result(data.task, data.exc_value),
+                .PythonTask => |data| Task.Callback.step_run_and_handle_result(data.task, data.exc_value),
             };
         },
         else => {
@@ -133,7 +133,7 @@ pub inline fn run_callback(
                 .PythonFuture => |data| Future.Callback.release_python_future_callback(data),
                 .PythonTask => |data| {
                     data.task.must_cancel = true;
-                    _ = Task.step_run_and_handle_result(data.task, data.exc_value);
+                    _ = Task.Callback.step_run_and_handle_result(data.task, data.exc_value);
                 },
             }
             return .Continue;

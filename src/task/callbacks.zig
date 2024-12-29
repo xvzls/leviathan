@@ -11,7 +11,7 @@ const Loop = @import("../loop/main.zig");
 
 const std = @import("std");
 
-pub const TaskCallbackData = struct {
+pub const Data = struct {
     task: *Task.PythonTaskObject,
     exc_value: ?PyObject = null
 };

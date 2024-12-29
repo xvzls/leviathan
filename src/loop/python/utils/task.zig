@@ -81,7 +81,7 @@ inline fn z_loop_create_task(
     const coro: PyObject = python_c.py_newref(args[0].?);
     errdefer python_c.py_decref(coro);
 
-    const task = try Task.constructors.fast_new_task(self, coro, context.?, name);
+    const task = try Task.Constructors.fast_new_task(self, coro, context.?, name);
     return task;
 }
 

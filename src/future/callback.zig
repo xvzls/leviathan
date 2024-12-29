@@ -13,12 +13,12 @@ const PyObject = *python_c.PyObject;
 
 const MaxCallbacks = 8;
 
-pub const FutureCallbacksSetData = struct {
+pub const CallbacksSetData = struct {
     sets_queue: *CallbackManager.CallbacksSetsQueue,
     future: *Future.Python.FutureObject,
 };
 
-pub const FutureCallbackData = struct {
+pub const Data = struct {
     args: []PyObject,
     exception_handler: PyObject,
     py_callback: PyObject,
@@ -26,13 +26,13 @@ pub const FutureCallbackData = struct {
     dec_future: bool = false
 };
 
-pub inline fn release_python_future_callback(data: FutureCallbackData) void {
+pub inline fn release_python_future_callback(data: Data) void {
     python_c.py_decref(data.py_callback);
     python_c.py_decref(data.args[0]);
     if (data.dec_future) python_c.py_decref(data.args[1]);
 }
 
-pub fn callback_for_python_future_callbacks(data: FutureCallbackData) CallbackManager.ExecuteCallbacksReturn {
+pub fn callback_for_python_future_callbacks(data: Data) CallbackManager.ExecuteCallbacksReturn {
     defer release_python_future_callback(data);
     if (!data.can_execute) return .Continue;
 
@@ -63,7 +63,7 @@ pub fn callback_for_python_future_callbacks(data: FutureCallbackData) CallbackMa
 }
 
 pub inline fn run_python_future_set_callbacks(
-    allocator: std.mem.Allocator, data: FutureCallbacksSetData, status: CallbackManager.ExecuteCallbacksReturn
+    allocator: std.mem.Allocator, data: CallbacksSetData, status: CallbackManager.ExecuteCallbacksReturn
 ) CallbackManager.ExecuteCallbacksReturn {
     defer python_c.py_decref(@ptrCast(data.future));
     return CallbackManager.execute_callbacks(allocator, data.sets_queue, status, false);
