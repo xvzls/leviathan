@@ -8,7 +8,7 @@ const Future = @import("../main.zig");
 const Loop = @import("../../loop/main.zig");
 
 const LoopObject = Loop.Python.LoopObject;
-const PythonFutureObject = Future.FutureObject;
+const PythonFutureObject = Future.Python.FutureObject;
 
 const std = @import("std");
 
@@ -40,7 +40,7 @@ pub inline fn future_init_configuration(self: *PythonFutureObject, leviathan_loo
 
 pub inline fn fast_new_future(leviathan_loop: *LoopObject) !*PythonFutureObject {
     const instance: *PythonFutureObject = @ptrCast(
-        Future.PythonFutureType.tp_alloc.?(&Future.PythonFutureType, 0) orelse return error.PythonError
+        Future.Python.FutureType.tp_alloc.?(&Future.Python.FutureType, 0) orelse return error.PythonError
     );
 
     future_set_initial_values(instance);

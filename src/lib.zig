@@ -11,7 +11,7 @@ const loop = leviathan.Loop;
 const handle = leviathan.Handle;
 
 const leviathan_types = .{
-    &future.PythonFutureType,
+    &future.Python.FutureType,
     &task.PythonTaskType,
     &loop.Python.LoopType,
     &handle.PythonHandleType

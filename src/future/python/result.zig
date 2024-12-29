@@ -2,7 +2,7 @@ const python_c = @import("python_c");
 const PyObject = *python_c.PyObject;
 
 const Future = @import("../main.zig");
-const PythonFutureObject = Future.FutureObject;
+const PythonFutureObject = Future.Python.FutureObject;
 
 const utils = @import("../../utils/utils.zig");
 
@@ -89,7 +89,7 @@ pub inline fn future_fast_set_exception(self: *PythonFutureObject, obj: *Future,
     self.exception_tb = python_c.PyException_GetTraceback(exception);
     errdefer python_c.py_decref_and_set_null(&self.exception_tb);
 
-    try obj.call_done_callbacks(.FINISHED);
+    try Future.Callback.call_done_callbacks(obj, .FINISHED);
     return 0;
 }
 
@@ -124,7 +124,7 @@ pub inline fn future_fast_set_result(obj: *Future, result: PyObject) !void {
     obj.result = python_c.py_newref(result);
     errdefer python_c.py_decref_and_set_null(@alignCast(@ptrCast(&obj.result)));
 
-    try obj.call_done_callbacks(.FINISHED);
+    try Future.Callback.call_done_callbacks(obj, .FINISHED);
 }
 
 inline fn z_future_set_result(self: *PythonFutureObject, args: ?PyObject) !PyObject {

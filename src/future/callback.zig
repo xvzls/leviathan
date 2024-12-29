@@ -15,7 +15,7 @@ const MaxCallbacks = 8;
 
 pub const FutureCallbacksSetData = struct {
     sets_queue: *CallbackManager.CallbacksSetsQueue,
-    future: *Future.FutureObject,
+    future: *Future.Python.FutureObject,
 };
 
 pub const FutureCallbackData = struct {
@@ -62,7 +62,7 @@ pub fn callback_for_python_future_callbacks(data: FutureCallbackData) CallbackMa
     return .Continue;
 }
 
-pub inline fn callback_for_python_future_set_callbacks(
+pub inline fn run_python_future_set_callbacks(
     allocator: std.mem.Allocator, data: FutureCallbacksSetData, status: CallbackManager.ExecuteCallbacksReturn
 ) CallbackManager.ExecuteCallbacksReturn {
     defer python_c.py_decref(@ptrCast(data.future));
@@ -137,7 +137,7 @@ pub inline fn call_done_callbacks(self: *Future, new_status: Future.FutureStatus
         return;
     }
 
-    const pyfut = utils.get_parent_ptr(Future.FutureObject, self);
+    const pyfut = utils.get_parent_ptr(Future.Python.FutureObject, self);
     python_c.py_incref(@ptrCast(pyfut));
     errdefer python_c.py_decref(@ptrCast(pyfut));
 

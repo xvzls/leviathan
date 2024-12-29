@@ -6,12 +6,12 @@ const utils = @import("../../../utils/utils.zig");
 const Loop = @import("../../main.zig");
 const Task = @import("../../../task/main.zig");
 
-const LoopObject = Loop.Python.LoopObject;
+const PythonLoopObject = Loop.Python.LoopObject;
 const PythonTaskObject = Task.PythonTaskObject;
 
 
 inline fn get_py_context_and_name(
-    knames: ?PyObject, args_ptr: [*]?PyObject, loop: *LoopObject,
+    knames: ?PyObject, args_ptr: [*]?PyObject, loop: *PythonLoopObject,
     context: *?PyObject, name: *?PyObject
 ) !void {
     var _context: ?PyObject = null;
@@ -62,7 +62,7 @@ inline fn get_py_context_and_name(
 }
 
 inline fn z_loop_create_task(
-    self: *LoopObject, args: []?PyObject,
+    self: *PythonLoopObject, args: []?PyObject,
     knames: ?PyObject
 ) !*PythonTaskObject {
     if (args.len != 1) {
@@ -86,7 +86,7 @@ inline fn z_loop_create_task(
 }
 
 pub fn loop_create_task(
-    self: ?*LoopObject, args: ?[*]?PyObject, nargs: isize, knames: ?PyObject
+    self: ?*PythonLoopObject, args: ?[*]?PyObject, nargs: isize, knames: ?PyObject
 ) callconv(.C) ?*PythonTaskObject {
     return utils.execute_zig_function(z_loop_create_task, .{
         self.?, args.?[0..@as(usize, @intCast(nargs))], knames

@@ -92,7 +92,7 @@ const PythonTaskMembers: []const python_c.PyMemberDef = &[_]python_c.PyMemberDef
     python_c.PyMemberDef{
         .name = "_exception\x00",
         .type = python_c._Py_T_OBJECT,
-        .offset = @offsetOf(Future.FutureObject, "exception"),
+        .offset = @offsetOf(Future.Python.FutureObject, "exception"),
         .doc = null,
         .flags = python_c.Py_READONLY
     },
@@ -109,7 +109,7 @@ const PythonTaskMembers: []const python_c.PyMemberDef = &[_]python_c.PyMemberDef
 };
 
 pub const PythonTaskObject = extern struct {
-    fut: Future.FutureObject,
+    fut: Future.Python.FutureObject,
 
     py_context: ?PyObject,
     run_context: ?PyObject,
@@ -128,7 +128,7 @@ pub const PythonTaskObject = extern struct {
 pub var PythonTaskType = python_c.PyTypeObject{
     .tp_name = "leviathan.Task\x00",
     .tp_doc = "Leviathan's task class\x00",
-    .tp_base = &Future.PythonFutureType,
+    .tp_base = &Future.Python.FutureType,
     .tp_basicsize = @sizeOf(PythonTaskObject),
     .tp_itemsize = 0,
     .tp_flags = python_c.Py_TPFLAGS_DEFAULT | python_c.Py_TPFLAGS_BASETYPE | python_c.Py_TPFLAGS_HAVE_GC,

@@ -15,7 +15,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 
 inline fn task_set_initial_values(self: *PythonTaskObject) void {
-    Future.constructors.future_set_initial_values(&self.fut);
+    Future.Python.Constructors.future_set_initial_values(&self.fut);
     self.run_context = null;
     self.py_context = null;
     self.coro = null;
@@ -31,7 +31,7 @@ inline fn task_init_configuration(
     self: *PythonTaskObject, loop: *LoopObject,
     coro: PyObject, context: PyObject, name: ?PyObject
 ) !void {
-    Future.constructors.future_init_configuration(&self.fut, loop);
+    Future.Python.Constructors.future_init_configuration(&self.fut, loop);
     if (python_c.PyCoro_CheckExact(coro) == 0) {
         python_c.PyErr_SetString(
             python_c.PyExc_TypeError, "Coro argument must be a coroutine\x00"

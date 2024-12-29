@@ -4,7 +4,7 @@ const python_c = @import("python_c");
 const PyObject = *python_c.PyObject;
 
 const Future = @import("../main.zig");
-const PythonFutureObject = Future.FutureObject;
+const PythonFutureObject = Future.Python.FutureObject;
 
 const utils = @import("../../utils/utils.zig");
 
@@ -19,7 +19,7 @@ pub inline fn future_fast_cancel(instance: *PythonFutureObject, cancel_msg_py_ob
     }
 
     const future_data = utils.get_data_ptr(Future, instance);
-    future_data.call_done_callbacks(.CANCELED) catch |err| {
+    Future.Callback.call_done_callbacks(future_data, .CANCELED) catch |err| {
         const err_trace = @errorReturnTrace();
         utils.print_error_traces(err_trace, err);
         utils.put_python_runtime_error_message(@errorName(err));

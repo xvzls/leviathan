@@ -46,8 +46,8 @@ pub inline fn release(self: *Future) void {
     self.released = true;
 }
 
-pub usingnamespace @import("callback.zig");
-pub usingnamespace @import("python/main.zig");
+pub const Callback = @import("callback.zig");
+pub const Python = @import("python/main.zig");
 
 
 const Future = @This();

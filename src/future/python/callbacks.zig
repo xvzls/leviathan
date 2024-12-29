@@ -5,7 +5,7 @@ const PyObject = *python_c.PyObject;
 
 const Future = @import("../main.zig");
 const Loop = @import("../../loop/main.zig");
-const PythonFutureObject = Future.FutureObject;
+const PythonFutureObject = Future.Python.FutureObject;
 
 const CallbackManager = @import("../../callback_manager.zig");
 
@@ -59,7 +59,7 @@ inline fn z_future_add_done_callback(self: *PythonFutureObject, args: PyObject) 
     };
 
     switch (future_data.status) {
-        .PENDING => try future_data.add_done_callback(callback_data),
+        .PENDING => try Future.Callback.add_done_callback(future_data, callback_data),
         else => {
             python_c.py_incref(@ptrCast(self));
             errdefer python_c.py_decref(@ptrCast(self));
@@ -87,7 +87,9 @@ pub fn future_remove_done_callback(self: ?*PythonFutureObject, args: ?PyObject) 
     mutex.lock();
     defer mutex.unlock();
 
-    const removed_count = future_data.remove_done_callback(@intCast(@intFromPtr(callback.?))) catch |err| {
+    const removed_count = Future.Callback.remove_done_callback(
+        future_data, @intCast(@intFromPtr(callback.?))
+    ) catch |err| {
         const err_trace = @errorReturnTrace();
         utils.print_error_traces(err_trace, err);
         utils.put_python_runtime_error_message(@errorName(err));

@@ -93,8 +93,8 @@ inline fn execute_zig_function(
 inline fn cancel_future_object(
     task: *Task.PythonTaskObject, future: anytype
 ) CallbackManager.ExecuteCallbacksReturn {
-    if (@TypeOf(future) == *Future.FutureObject) {
-        if (!Future.cancel.future_fast_cancel(future, task.fut.cancel_msg_py_object)) {
+    if (@TypeOf(future) == *Future.Python.FutureObject) {
+        if (!Future.Python.Cancel.future_fast_cancel(future, task.fut.cancel_msg_py_object)) {
             return .Exception;
         }
     }else{
@@ -178,7 +178,7 @@ inline fn handle_legacy_future_object(
 
 inline fn handle_leviathan_future_object(
     task: *Task.PythonTaskObject,
-    future: *Future.FutureObject
+    future: *Future.Python.FutureObject
 ) CallbackManager.ExecuteCallbacksReturn {
     const loop_data = utils.get_data_ptr(Loop, task.fut.py_loop.?);
     const allocator = loop_data.allocator;
@@ -216,7 +216,7 @@ inline fn handle_leviathan_future_object(
         };
 
         const ret = execute_zig_function(
-            Future.add_done_callback, .{future_data, callback}
+            Future.Callback.add_done_callback, .{future_data, callback}
         );
         if (ret == .Continue) {
             python_c.py_incref(@ptrCast(task));
@@ -243,7 +243,7 @@ inline fn handle_leviathan_future_object(
 inline fn successfully_execution(
     task: *Task.PythonTaskObject, result: PyObject
 ) CallbackManager.ExecuteCallbacksReturn {
-    if (python_c.PyObject_TypeCheck(result, &Future.PythonFutureType) != 0) {
+    if (python_c.PyObject_TypeCheck(result, &Future.Python.FutureType) != 0) {
         return handle_leviathan_future_object(task, @ptrCast(result));
     }else if (python_c.Py_IsNone(result) != 0) {
         const loop_data = utils.get_data_ptr(Loop, task.fut.py_loop.?);
@@ -269,21 +269,21 @@ inline fn successfully_execution(
 inline fn failed_execution(task: *Task.PythonTaskObject) CallbackManager.ExecuteCallbacksReturn {
     const exc_match = python_c.PyErr_GivenExceptionMatches;
 
-    const fut: *Future.FutureObject = &task.fut;
+    const fut: *Future.Python.FutureObject = &task.fut;
     const future_data = utils.get_data_ptr(Future, fut);
     const exception: PyObject = python_c.PyErr_GetRaisedException() orelse return .Exception;
     defer python_c.py_decref(exception);
 
     if (exc_match(exception, python_c.PyExc_StopIteration) > 0) {
         if (task.must_cancel) {
-            if (!Future.cancel.future_fast_cancel(fut, fut.cancel_msg_py_object)) {
+            if (!Future.Python.Cancel.future_fast_cancel(fut, fut.cancel_msg_py_object)) {
                 return .Exception;
             }
         }else{
             const value: PyObject = python_c.PyObject_GetAttrString(exception, "value\x00")
                 orelse return .Exception;
             return execute_zig_function(
-                Future.result.future_fast_set_result, .{future_data, value}
+                Future.Python.Result.future_fast_set_result, .{future_data, value}
             );
         }
 
@@ -293,7 +293,7 @@ inline fn failed_execution(task: *Task.PythonTaskObject) CallbackManager.Execute
     const py_loop = task.fut.py_loop.?;
     const cancelled_error = py_loop.cancelled_error_exc.?;
     if (exc_match(exception, cancelled_error) > 0) {
-        if (!Future.cancel.future_fast_cancel(fut, null)) {
+        if (!Future.Python.Cancel.future_fast_cancel(fut, null)) {
             return .Exception;
         }
         return .Continue;
@@ -301,7 +301,7 @@ inline fn failed_execution(task: *Task.PythonTaskObject) CallbackManager.Execute
 
     if (
         utils.execute_zig_function(
-            Future.result.future_fast_set_exception, .{fut, future_data, exception}
+            Future.Python.Result.future_fast_set_exception, .{fut, future_data, exception}
         ) < 0 or
         exc_match(exception, python_c.PyExc_SystemExit) > 0 or
         exc_match(exception, python_c.PyExc_KeyboardInterrupt) > 0
@@ -406,8 +406,8 @@ fn wakeup_task(
 
     defer python_c.py_decref(py_future);
 
-    if (python_c.PyObject_TypeCheck(py_future, &Future.PythonFutureType) != 0) {
-        const leviathan_fut: *Future.FutureObject = @alignCast(@ptrCast(py_future));
+    if (python_c.PyObject_TypeCheck(py_future, &Future.Python.FutureType) != 0) {
+        const leviathan_fut: *Future.Python.FutureObject = @alignCast(@ptrCast(py_future));
         if (leviathan_fut.exception) |exception| {
             exc_value = python_c.py_newref(exception);
         }

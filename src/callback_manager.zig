@@ -29,8 +29,8 @@ pub const ZigGenericCallbackData = struct {
 pub const Callback = union(CallbackType) {
     ZigGeneric: ZigGenericCallbackData,
     PythonGeneric: Handle.GenericCallbackData,
-    PythonFutureCallbacksSet: Future.FutureCallbacksSetData,
-    PythonFuture: Future.FutureCallbackData,
+    PythonFutureCallbacksSet: Future.Callback.FutureCallbacksSetData,
+    PythonFuture: Future.Callback.FutureCallbackData,
     PythonTask: Task.TaskCallbackData
 };
 
@@ -112,10 +112,10 @@ pub inline fn run_callback(
             return switch (callback) {
                 .ZigGeneric => |data| data.callback(data.data, if (data.can_execute) status else .Stop),
                 .PythonGeneric => |data| Handle.callback_for_python_generic_callbacks(allocator, data),
-                .PythonFutureCallbacksSet => |data| Future.callback_for_python_future_set_callbacks(
+                .PythonFutureCallbacksSet => |data| Future.Callback.run_python_future_set_callbacks(
                     allocator, data, status
                 ),
-                .PythonFuture => |data| Future.callback_for_python_future_callbacks(data),
+                .PythonFuture => |data| Future.Callback.callback_for_python_future_callbacks(data),
                 .PythonTask => |data| Task.step_run_and_handle_result(data.task, data.exc_value),
             };
         },
@@ -126,11 +126,11 @@ pub inline fn run_callback(
                 },
                 .PythonGeneric => |data| Handle.release_python_generic_callback(allocator, data),
                 .PythonFutureCallbacksSet => |data| {
-                    _ = Future.callback_for_python_future_set_callbacks(
+                    _ = Future.Callback.run_python_future_set_callbacks(
                         allocator, data, status
                     );
                 },
-                .PythonFuture => |data| Future.release_python_future_callback(data),
+                .PythonFuture => |data| Future.Callback.release_python_future_callback(data),
                 .PythonTask => |data| {
                     data.task.must_cancel = true;
                     _ = Task.step_run_and_handle_result(data.task, data.exc_value);
