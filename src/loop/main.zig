@@ -5,13 +5,6 @@ const CallbackManager = @import("../callback_manager.zig");
 const python_c = @import("python_c");
 
 const LinkedList = @import("../utils/linked_list.zig");
-const BTree = @import("../utils/btree/btree.zig");
-
-pub const DeleyedQueue = struct {
-    btree: *BTree,
-    min_delay: ?u64 = null,
-    min_node: ?*BTree.Node = null,
-};
 
 pub const MaxCallbacks = 128;
 
@@ -20,11 +13,11 @@ allocator: std.mem.Allocator,
 ready_tasks_queue_index: u8 = 0,
 
 ready_tasks_queues: [2]CallbackManager.CallbacksSetsQueue,
+blocking_tasks_queue: LinkedList,
 
 max_callbacks_sets_per_queue: [2]usize,
 ready_tasks_queue_min_bytes_capacity: usize,
 
-delayed_tasks: DeleyedQueue,
 mutex: std.Thread.Mutex,
 
 running: bool = false,
@@ -53,9 +46,7 @@ pub fn init(self: *Loop, allocator: std.mem.Allocator, rtq_min_capacity: usize) 
             max_callbacks_sets_per_queue,
         },
         .ready_tasks_queue_min_bytes_capacity = rtq_min_capacity,
-        .delayed_tasks = .{
-            .btree = try BTree.init(allocator),
-        }
+        .blocking_tasks_queue = LinkedList.init(allocator)
     };
 }
 
@@ -77,10 +68,10 @@ pub fn release(self: *Loop) void {
         }
     }
 
-    const delayed_tasks_btree = self.delayed_tasks.btree;
-    while (delayed_tasks_btree.pop(null) != null) {}
-    delayed_tasks_btree.release() catch unreachable;
-
+    if (!self.blocking_tasks_queue.is_empty()) {
+        // TODO: Implement logic for releasing blocking tasks
+        @panic("Loop has blocking tasks, can't be deallocated");
+    }
     self.released = true;
 }
 

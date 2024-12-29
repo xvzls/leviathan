@@ -38,6 +38,23 @@ pub fn release_node(self: *const wLinkedList, node: Node) void {
     self.allocator.destroy(node);
 }
 
+pub fn unlink_node(self: *wLinkedList, node: Node) void {
+    const prev_node = node.prev;
+    const next_node = node.next;
+
+    if (prev_node) |n| {
+        n.next = next_node;
+    }else{
+        self.first = next_node;
+    }
+
+    if (next_node) |n| {
+        n.prev = prev_node;
+    }else{
+        self.last = prev_node;
+    }
+}
+
 pub fn append_node(self: *wLinkedList, new_node: Node) void {
     if (self.last) |last_node| {
         last_node.next = new_node;
