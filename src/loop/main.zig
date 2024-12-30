@@ -13,7 +13,11 @@ allocator: std.mem.Allocator,
 ready_tasks_queue_index: u8 = 0,
 
 ready_tasks_queues: [2]CallbackManager.CallbacksSetsQueue,
+
+blocking_tasks_epoll_fd: i32 = -1,
+blocking_ready_epoll_events: []std.os.linux.epoll_event,
 blocking_tasks_queue: LinkedList,
+blocking_ready_tasks: []std.os.linux.io_uring_cqe,
 
 max_callbacks_sets_per_queue: [2]usize,
 ready_tasks_queue_min_bytes_capacity: usize,
@@ -29,6 +33,12 @@ pub fn init(self: *Loop, allocator: std.mem.Allocator, rtq_min_capacity: usize) 
     const max_callbacks_sets_per_queue = CallbackManager.get_max_callbacks_sets(
         rtq_min_capacity, MaxCallbacks
     );
+
+    const blocking_ready_tasks = try allocator.alloc(std.os.linux.io_uring_cqe, Scheduling.IO.TotalItems);
+    errdefer allocator.free(blocking_ready_tasks);
+
+    const blocking_ready_epoll_events = try allocator.alloc(std.os.linux.epoll_event, 256);
+    errdefer allocator.free(blocking_ready_epoll_events);
 
     self.* = .{
         .allocator = allocator,
@@ -46,8 +56,12 @@ pub fn init(self: *Loop, allocator: std.mem.Allocator, rtq_min_capacity: usize) 
             max_callbacks_sets_per_queue,
         },
         .ready_tasks_queue_min_bytes_capacity = rtq_min_capacity,
-        .blocking_tasks_queue = LinkedList.init(allocator)
+        .blocking_tasks_queue = LinkedList.init(allocator),
+        .blocking_ready_tasks = blocking_ready_tasks,
+        .blocking_tasks_epoll_fd = try std.posix.epoll_create1(0),
+        .blocking_ready_epoll_events = blocking_ready_epoll_events
     };
+
 }
 
 pub fn release(self: *Loop) void {
@@ -71,6 +85,10 @@ pub fn release(self: *Loop) void {
     if (!self.blocking_tasks_queue.is_empty()) {
         // TODO: Implement logic for releasing blocking tasks
         @panic("Loop has blocking tasks, can't be deallocated");
+    }
+
+    if (self.blocking_tasks_epoll_fd != -1) {
+        std.posix.close(self.blocking_tasks_epoll_fd);
     }
     self.released = true;
 }

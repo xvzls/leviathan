@@ -58,6 +58,47 @@ inline fn remove_exceded_callbacks(
     }
 }
 
+inline fn fetch_completed_tasks(
+    allocator: std.mem.Allocator, epoll_fd: i32, blocking_tasks_queue: *LinkedList,
+    blocking_tasks_set: *Loop.Scheduling.IO.BlockingTasksSet, blocking_ready_tasks: []std.os.linux.io_uring_cqe,
+    ready_queue: *CallbackManager.CallbacksSetsQueue
+) !void {
+    var eventfd_val: [8]u8 = undefined;
+    const data_read = try std.posix.read(blocking_tasks_set.eventfd, &eventfd_val);
+    if (data_read != 8) unreachable;
+
+    const ring = &blocking_tasks_set.ring;
+    const nevents = try ring.copy_cqes(blocking_ready_tasks, 0);
+    for (blocking_ready_tasks[0..nevents]) |cqe| {
+        const blocking_task_data: *Loop.Scheduling.IO.BlockingTaskData = @ptrFromInt(cqe.user_data);
+        blocking_tasks_set.pop(blocking_task_data.id) catch unreachable;
+        _ = try CallbackManager.append_new_callback(allocator, ready_queue, blocking_task_data.data, Loop.MaxCallbacks);
+    }
+
+    if (blocking_tasks_set.free_items_count == Loop.Scheduling.IO.TotalItems) {
+        Loop.Scheduling.IO.remove_tasks_set(epoll_fd, blocking_tasks_queue, blocking_tasks_set);
+    }
+}
+
+fn poll_blocking_events(
+    loop: *Loop, timeout: i32, ready_queue: *CallbackManager.CallbacksSetsQueue
+) !void {
+    const epoll_fd = loop.blocking_tasks_epoll_fd;
+    const blocking_ready_epoll_events = loop.blocking_ready_epoll_events;
+    const nevents = std.posix.epoll_wait(epoll_fd, blocking_ready_epoll_events, timeout);
+
+    const allocator = loop.allocator;
+    const blocking_tasks_queue = &loop.blocking_tasks_queue;
+    const blocking_ready_tasks = loop.blocking_ready_tasks;
+
+    for (blocking_ready_epoll_events[0..nevents]) |event| {
+        try fetch_completed_tasks(
+            allocator, epoll_fd, blocking_tasks_queue, @ptrFromInt(event.data.ptr),
+            blocking_ready_tasks, ready_queue
+        );
+    }
+}
+
 inline fn call_once(
     loop: *Loop, index: usize, max_number_of_callbacks_set: usize,
     ready_queue: *CallbackManager.CallbacksSetsQueue
@@ -94,6 +135,7 @@ pub fn start(self: *Loop) !void {
     const ready_tasks_queues: []CallbackManager.CallbacksSetsQueue = &self.ready_tasks_queues;
     const max_callbacks_set_per_queue: []usize = &self.max_callbacks_sets_per_queue;
     var ready_tasks_queue_index = self.ready_tasks_queue_index;
+    var timeout: i32 = 0;
     while (!self.stopping) {
         const old_index = ready_tasks_queue_index;
         ready_tasks_queue_index = 1 - ready_tasks_queue_index;
@@ -101,16 +143,21 @@ pub fn start(self: *Loop) !void {
 
         mutex.unlock();
         defer mutex.lock();
+        
+        const ready_tasks_queue = &ready_tasks_queues[old_index];
+        try poll_blocking_events(self, timeout, ready_tasks_queue);
 
         switch (
             call_once(
-                self, old_index, max_callbacks_set_per_queue[old_index], &ready_tasks_queues[old_index]
+                self, old_index, max_callbacks_set_per_queue[old_index], ready_tasks_queue
             )
         ) {
             .Continue => {},
             .Stop => break,
             .Exception => return error.PythonError,
-            .None => std.Thread.yield() catch std.atomic.spinLoopHint(),
+            .None => {
+                timeout = -1;
+            },
         }
     }
 }

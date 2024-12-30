@@ -7,13 +7,14 @@ const Loop = @import("../../main.zig");
 
 pub const Read = @import("read.zig");
 pub const Write = @import("write.zig");
+pub const Timer = @import("timer.zig");
 
 pub const BlockingTaskData = struct {
     id: usize,
     data: CallbackManger.Callback
 };
 
-const TotalItems = 1024;
+pub const TotalItems = 1024;
 
 pub const BlockingTasksSet = struct {
     ring: std.os.linux.IoUring,
@@ -23,18 +24,27 @@ pub const BlockingTasksSet = struct {
     free_item_index: usize = 0,
     busy_item_index: usize = 0,
 
+    eventfd: i32,
+
     node: LinkedList.Node,
 
     pub fn init(allocator: std.mem.Allocator, node: LinkedList.Node) !*BlockingTasksSet {
         const set = allocator.create(BlockingTasksSet) catch unreachable;
         errdefer allocator.destroy(set);
 
+        const eventfd = try std.posix.eventfd(1, std.os.linux.EFD_NONBLOCK|std.os.linux.EFD_CLOEXEC);
+        errdefer std.posix.close(eventfd);
+
         set.* = .{
-            .ring = try std.os.linux.IoUring.init(TotalItems),
+            .ring = try std.os.linux.IoUring.init(TotalItems, 0),
             .tasks_data = undefined,
             .free_items = undefined,
-            .node = node
+            .node = node,
+            .eventfd = eventfd
         };
+        errdefer set.ring.deinit();
+
+        try set.ring.register_eventfd(eventfd);
 
         for (set.free_items, 0..) |*item, i| {
             item.* = i;
@@ -50,17 +60,15 @@ pub const BlockingTasksSet = struct {
         }
         const node = self.node;
 
+        self.ring.unregister_eventfd() catch unreachable;
+        std.posix.close(self.eventfd);
+
         self.ring.deinit();
         allocator.destroy(self);
         return node;
     }
 
-    pub fn get_from_task_data(data: *BlockingTaskData) *BlockingTaskData {
-        const ptr = @intFromPtr(data) - data.id * @sizeOf(BlockingTaskData) - @offsetOf(BlockingTaskData, "tasks_data"); 
-        return @ptrFromInt(ptr);
-    }
-
-    pub fn push(self: *BlockingTasksSet, data: CallbackManger.Callback) !*BlockingTaskData {
+    pub inline fn push(self: *BlockingTasksSet, data: CallbackManger.Callback) !*BlockingTaskData {
         if (self.free_items_count == 0) {
             return error.NoFreeItems;
         }
@@ -79,7 +87,7 @@ pub const BlockingTasksSet = struct {
         return task_data;
     }
 
-    pub fn pop(self: *BlockingTasksSet, id: usize) !void {
+    pub inline fn pop(self: *BlockingTasksSet, id: usize) !void {
         if (self.free_items_count == TotalItems) {
             return error.NoBusyItems;
         }else if (id >= TotalItems) {
@@ -96,23 +104,26 @@ pub const BlockingTasksSet = struct {
 pub const BlockingOperation = enum {
     WaitReadable,
     WaitWritable,
-    PerformRead,
-    PerformWrite,
+    // PerformRead,
+    // PerformWrite,
     WaitTimer
 };
 
-pub const WaitingOperationData = struct {
+pub const WaitData = struct {
     callback: CallbackManger.Callback,
     fd: std.os.linux.fd_t
 };
 
 pub const BlockingOperationData = union(BlockingOperation) {
-    WaitReadable: WaitingOperationData,
-    WaitWritable: WaitingOperationData,
-    WaitTimer: CallbackManger.Callback
+    WaitReadable: WaitData,
+    WaitWritable: WaitData,
+    WaitTimer: Timer.WaitData
 };
 
-inline fn get_blocking_tasks_set(allocator: std.mem.Allocator, blocking_tasks_queue: *LinkedList) !*BlockingTasksSet {
+inline fn get_blocking_tasks_set(
+    allocator: std.mem.Allocator, epoll_fd: i32,
+    blocking_tasks_queue: *LinkedList
+) !*BlockingTasksSet {
     if (blocking_tasks_queue.last) |node| {
         const set: *BlockingTasksSet = @alignCast(@ptrCast(node.data.?));
         if (set.free_items_count > 0) {
@@ -129,28 +140,40 @@ inline fn get_blocking_tasks_set(allocator: std.mem.Allocator, blocking_tasks_qu
         blocking_tasks_queue.unlink_node(new_node);
     }
 
-    try blocking_tasks_queue.append(new_set);
+    const epoll_event: *std.os.linux.epoll_event = try allocator.create(std.os.linux.epoll_event);
+    errdefer allocator.destroy(epoll_event);
+
+    epoll_event.events = std.os.linux.EPOLL.IN;
+    epoll_event.data.ptr = @intFromPtr(new_set);
+
+    try blocking_tasks_queue.append_node(new_node);
+    errdefer _ = blocking_tasks_queue.pop_node();
+
+    try std.posix.epoll_ctl(epoll_fd, std.os.linux.EPOLL.CTL_ADD, new_set.eventfd, epoll_event);
     return new_set;
 }
 
-pub fn remove_last_tasks_set(blocking_tasks_queue: *LinkedList, blocking_tasks_set: *BlockingTasksSet) void {
+pub inline fn remove_tasks_set(
+    epoll_fd: i32, blocking_tasks_queue: *LinkedList,
+    blocking_tasks_set: *BlockingTasksSet
+) void {
+    std.posix.epoll_ctl(epoll_fd, std.os.linux.EPOLL.CTL_DEL, blocking_tasks_set.eventfd, null) catch unreachable;
     const node = blocking_tasks_set.deinit();
     blocking_tasks_queue.unlink_node(node);
 }
 
-pub fn queue(self: *Loop, event: BlockingOperation, data: BlockingOperationData) !void {
+pub fn queue(self: *Loop, event: BlockingOperationData) !void {
     const blocking_tasks_queue = &self.blocking_tasks_queue;
     const blocking_tasks_set = try get_blocking_tasks_set(self.allocator, blocking_tasks_queue);
     errdefer {
         if (blocking_tasks_set.free_items_count == TotalItems) {
-            remove_last_tasks_set(blocking_tasks_queue, blocking_tasks_set);
+            remove_tasks_set(blocking_tasks_queue, blocking_tasks_set);
         }
     }
 
     switch (event) {
-        .WaitReadable => Read.wait_readable(blocking_tasks_set, data.WaitReadable),
-        .WaitWritable => Write.wait_writable(blocking_tasks_set, data.WaitWritable),
-        .WaitTimer => 
+        .WaitReadable => |data| try Read.wait_ready(blocking_tasks_set, data),
+        .WaitWritable => |data| try Write.wait_ready(blocking_tasks_set, data),
+        .WaitTimer => |data| try Timer.wait(blocking_tasks_set, data),
     }
-
 }
