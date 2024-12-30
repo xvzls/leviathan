@@ -17,6 +17,7 @@ pub const BlockingTaskData = struct {
 pub const TotalItems = 1024;
 
 pub const BlockingTasksSet = struct {
+    allocator: std.mem.Allocator,
     ring: std.os.linux.IoUring,
     tasks_data: [TotalItems]BlockingTaskData,
     free_items: [TotalItems]usize,
@@ -36,6 +37,7 @@ pub const BlockingTasksSet = struct {
         errdefer std.posix.close(eventfd);
 
         set.* = .{
+            .allocator = allocator,
             .ring = try std.os.linux.IoUring.init(TotalItems, 0),
             .tasks_data = undefined,
             .free_items = undefined,
@@ -54,7 +56,7 @@ pub const BlockingTasksSet = struct {
         return set;
     }
 
-    pub fn deinit(self: *BlockingTasksSet, allocator: std.mem.Allocator) LinkedList.Node {
+    pub fn deinit(self: *BlockingTasksSet) LinkedList.Node {
         if (self.free_items_count != TotalItems) {
             @panic("Free items count is not equal to total items");
         }
@@ -64,7 +66,7 @@ pub const BlockingTasksSet = struct {
         std.posix.close(self.eventfd);
 
         self.ring.deinit();
-        allocator.destroy(self);
+        self.allocator.destroy(self);
         return node;
     }
 
@@ -136,7 +138,7 @@ inline fn get_blocking_tasks_set(
 
     const new_set = try BlockingTasksSet.init(allocator, new_node);
     errdefer {
-        _ = new_set.deinit(allocator);
+        _ = new_set.deinit();
         blocking_tasks_queue.unlink_node(new_node);
     }
 

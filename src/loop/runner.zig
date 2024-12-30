@@ -81,11 +81,20 @@ inline fn fetch_completed_tasks(
 }
 
 fn poll_blocking_events(
-    loop: *Loop, timeout: i32, ready_queue: *CallbackManager.CallbacksSetsQueue
+    loop: *Loop, mutex: *std.Thread.Mutex, wait: bool, ready_queue: *CallbackManager.CallbacksSetsQueue
 ) !void {
     const epoll_fd = loop.blocking_tasks_epoll_fd;
     const blocking_ready_epoll_events = loop.blocking_ready_epoll_events;
-    const nevents = std.posix.epoll_wait(epoll_fd, blocking_ready_epoll_events, timeout);
+
+    const nevents = blk: {
+        if (wait) {
+            mutex.unlock();
+            defer mutex.lock();
+            break :blk std.posix.epoll_wait(epoll_fd, blocking_ready_epoll_events, -1);
+        }else{
+            break :blk std.posix.epoll_wait(epoll_fd, blocking_ready_epoll_events, 0);
+        }
+    };
 
     const allocator = loop.allocator;
     const blocking_tasks_queue = &loop.blocking_tasks_queue;
@@ -135,29 +144,28 @@ pub fn start(self: *Loop) !void {
     const ready_tasks_queues: []CallbackManager.CallbacksSetsQueue = &self.ready_tasks_queues;
     const max_callbacks_set_per_queue: []usize = &self.max_callbacks_sets_per_queue;
     var ready_tasks_queue_index = self.ready_tasks_queue_index;
-    var timeout: i32 = 0;
+    var wait_for_blocking_events: bool = false;
     while (!self.stopping) {
         const old_index = ready_tasks_queue_index;
         ready_tasks_queue_index = 1 - ready_tasks_queue_index;
         self.ready_tasks_queue_index = ready_tasks_queue_index;
 
+        // TODO: Agregar eventfd para desbloquear epoll en caso que se agregue nuevo evento
+        const ready_tasks_queue = &ready_tasks_queues[old_index];
+        try poll_blocking_events(self, mutex, wait_for_blocking_events, ready_tasks_queue);
+
         mutex.unlock();
         defer mutex.lock();
-        
-        const ready_tasks_queue = &ready_tasks_queues[old_index];
-        try poll_blocking_events(self, timeout, ready_tasks_queue);
 
-        switch (
+        wait_for_blocking_events = switch (
             call_once(
                 self, old_index, max_callbacks_set_per_queue[old_index], ready_tasks_queue
             )
         ) {
-            .Continue => {},
+            .Continue => false,
             .Stop => break,
             .Exception => return error.PythonError,
-            .None => {
-                timeout = -1;
-            },
-        }
+            .None => true,
+        };
     }
 }
