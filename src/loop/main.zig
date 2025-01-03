@@ -61,8 +61,15 @@ pub fn init(self: *Loop, allocator: std.mem.Allocator, rtq_min_capacity: usize) 
         .blocking_tasks_queue = LinkedList.init(allocator),
         .blocking_ready_tasks = blocking_ready_tasks,
         .blocking_tasks_epoll_fd = try std.posix.epoll_create1(0),
-        .blocking_ready_epoll_events = blocking_ready_epoll_events
+        .blocking_ready_epoll_events = blocking_ready_epoll_events,
+        .unix_signals = undefined
     };
+    errdefer {
+        std.posix.close(self.blocking_tasks_epoll_fd);
+    }
+
+    try UnixSignals.init(self);
+
 }
 
 pub fn release(self: *Loop) void {

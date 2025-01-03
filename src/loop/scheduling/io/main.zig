@@ -33,7 +33,7 @@ pub const BlockingTasksSet = struct {
         const set = allocator.create(BlockingTasksSet) catch unreachable;
         errdefer allocator.destroy(set);
 
-        const eventfd = try std.posix.eventfd(1, std.os.linux.EFD_NONBLOCK|std.os.linux.EFD_CLOEXEC);
+        const eventfd = try std.posix.eventfd(1, std.os.linux.EFD.NONBLOCK|std.os.linux.EFD.CLOEXEC);
         errdefer std.posix.close(eventfd);
 
         set.* = .{
@@ -48,7 +48,7 @@ pub const BlockingTasksSet = struct {
 
         try set.ring.register_eventfd(eventfd);
 
-        for (set.free_items, 0..) |*item, i| {
+        for (&set.free_items, 0..) |*item, i| {
             item.* = i;
         }
 
@@ -150,8 +150,8 @@ inline fn get_blocking_tasks_set(
     epoll_event.events = std.os.linux.EPOLL.IN;
     epoll_event.data.ptr = @intFromPtr(new_set);
 
-    try blocking_tasks_queue.append_node(new_node);
-    errdefer _ = blocking_tasks_queue.pop_node();
+    blocking_tasks_queue.append_node(new_node);
+    errdefer _ = blocking_tasks_queue.pop_node() catch unreachable;
 
     try std.posix.epoll_ctl(epoll_fd, std.os.linux.EPOLL.CTL_ADD, new_set.eventfd, epoll_event);
     return new_set;
@@ -168,10 +168,13 @@ pub inline fn remove_tasks_set(
 
 pub fn queue(self: *Loop, event: BlockingOperationData) !void {
     const blocking_tasks_queue = &self.blocking_tasks_queue;
-    const blocking_tasks_set = try get_blocking_tasks_set(self.allocator, blocking_tasks_queue);
+    const epoll_fd = self.blocking_tasks_epoll_fd;
+    const blocking_tasks_set = try get_blocking_tasks_set(
+        self.allocator, epoll_fd, blocking_tasks_queue
+    );
     errdefer {
         if (blocking_tasks_set.free_items_count == TotalItems) {
-            remove_tasks_set(blocking_tasks_queue, blocking_tasks_set);
+            remove_tasks_set(epoll_fd, blocking_tasks_queue, blocking_tasks_set);
         }
     }
 

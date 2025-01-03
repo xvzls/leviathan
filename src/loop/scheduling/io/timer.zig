@@ -10,7 +10,7 @@ pub const DelayType = enum(u32) {
 
 pub const WaitData = struct {
     callback: CallbackManager.Callback,
-    duration: std.os.linux.timespec,
+    duration: std.os.linux.kernel_timespec,
     delay_type: DelayType
 };
 
