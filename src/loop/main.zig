@@ -14,7 +14,7 @@ ready_tasks_queue_index: u8 = 0,
 
 ready_tasks_queues: [2]CallbackManager.CallbacksSetsQueue,
 
-blocking_tasks_epoll_fd: i32 = -1,
+blocking_tasks_epoll_fd: std.posix.fd_t = -1,
 blocking_ready_epoll_events: []std.os.linux.epoll_event,
 blocking_tasks_queue: LinkedList,
 blocking_ready_tasks: []std.os.linux.io_uring_cqe,
@@ -23,6 +23,8 @@ max_callbacks_sets_per_queue: [2]usize,
 ready_tasks_queue_min_bytes_capacity: usize,
 
 mutex: std.Thread.Mutex,
+
+unix_signals: UnixSignals,
 
 running: bool = false,
 stopping: bool = false,
@@ -61,7 +63,6 @@ pub fn init(self: *Loop, allocator: std.mem.Allocator, rtq_min_capacity: usize) 
         .blocking_tasks_epoll_fd = try std.posix.epoll_create1(0),
         .blocking_ready_epoll_events = blocking_ready_epoll_events
     };
-
 }
 
 pub fn release(self: *Loop) void {
@@ -95,6 +96,7 @@ pub fn release(self: *Loop) void {
 
 pub const Runner = @import("runner.zig");
 pub const Scheduling = @import("scheduling/main.zig");
+pub const UnixSignals = @import("unix_signals.zig");
 pub const Python = @import("python/main.zig");
 
 const Loop = @This();

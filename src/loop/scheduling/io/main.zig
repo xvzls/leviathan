@@ -25,7 +25,7 @@ pub const BlockingTasksSet = struct {
     free_item_index: usize = 0,
     busy_item_index: usize = 0,
 
-    eventfd: i32,
+    eventfd: std.posix.fd_t,
 
     node: LinkedList.Node,
 
@@ -106,8 +106,8 @@ pub const BlockingTasksSet = struct {
 pub const BlockingOperation = enum {
     WaitReadable,
     WaitWritable,
-    // PerformRead,
-    // PerformWrite,
+    PerformRead,
+    PerformWrite,
     WaitTimer
 };
 
@@ -119,11 +119,13 @@ pub const WaitData = struct {
 pub const BlockingOperationData = union(BlockingOperation) {
     WaitReadable: WaitData,
     WaitWritable: WaitData,
+    PerformRead: Read.PerformData,
+    PerformWrite: Write.PerformData,
     WaitTimer: Timer.WaitData
 };
 
 inline fn get_blocking_tasks_set(
-    allocator: std.mem.Allocator, epoll_fd: i32,
+    allocator: std.mem.Allocator, epoll_fd: std.posix.fd_t,
     blocking_tasks_queue: *LinkedList
 ) !*BlockingTasksSet {
     if (blocking_tasks_queue.last) |node| {
@@ -156,7 +158,7 @@ inline fn get_blocking_tasks_set(
 }
 
 pub inline fn remove_tasks_set(
-    epoll_fd: i32, blocking_tasks_queue: *LinkedList,
+    epoll_fd: std.posix.fd_t, blocking_tasks_queue: *LinkedList,
     blocking_tasks_set: *BlockingTasksSet
 ) void {
     std.posix.epoll_ctl(epoll_fd, std.os.linux.EPOLL.CTL_DEL, blocking_tasks_set.eventfd, null) catch unreachable;
@@ -176,6 +178,8 @@ pub fn queue(self: *Loop, event: BlockingOperationData) !void {
     switch (event) {
         .WaitReadable => |data| try Read.wait_ready(blocking_tasks_set, data),
         .WaitWritable => |data| try Write.wait_ready(blocking_tasks_set, data),
+        .PerformRead => |data| try Read.perform(blocking_tasks_set, data),
+        .PerformWrite => |data| try Write.perform(blocking_tasks_set, data),
         .WaitTimer => |data| try Timer.wait(blocking_tasks_set, data),
     }
 }

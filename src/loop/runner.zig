@@ -59,7 +59,7 @@ inline fn remove_exceded_callbacks(
 }
 
 inline fn fetch_completed_tasks(
-    allocator: std.mem.Allocator, epoll_fd: i32, blocking_tasks_queue: *LinkedList,
+    allocator: std.mem.Allocator, epoll_fd: std.posix.fd_t, blocking_tasks_queue: *LinkedList,
     blocking_tasks_set: *Loop.Scheduling.IO.BlockingTasksSet, blocking_ready_tasks: []std.os.linux.io_uring_cqe,
     ready_queue: *CallbackManager.CallbacksSetsQueue
 ) !void {
