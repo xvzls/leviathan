@@ -4,7 +4,6 @@ const CallbackManager = @import("../callback_manager.zig");
 const Loop = @import("../loop/main.zig");
 const Future = @import("main.zig");
 
-const BTree = @import("../utils/btree/btree.zig");
 const LinkedList = @import("../utils/linked_list.zig");
 const utils = @import("../utils/utils.zig");
 
