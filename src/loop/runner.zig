@@ -59,25 +59,45 @@ inline fn remove_exceded_callbacks(
 }
 
 inline fn fetch_completed_tasks(
-    allocator: std.mem.Allocator, epoll_fd: std.posix.fd_t, blocking_tasks_queue: *LinkedList,
-    blocking_tasks_set: *Loop.Scheduling.IO.BlockingTasksSet, blocking_ready_tasks: []std.os.linux.io_uring_cqe,
+    loop: *Loop, allocator: std.mem.Allocator, epoll_fd: std.posix.fd_t, blocking_tasks_queue: *LinkedList,
+    blocking_tasks_set: ?*Loop.Scheduling.IO.BlockingTasksSet, blocking_ready_tasks: []std.os.linux.io_uring_cqe,
     ready_queue: *CallbackManager.CallbacksSetsQueue
 ) !void {
     var eventfd_val: [8]u8 = undefined;
-    const data_read = try std.posix.read(blocking_tasks_set.eventfd, &eventfd_val);
-    if (data_read != 8) unreachable;
+    var event_fd: std.posix.fd_t = undefined;
+    if (blocking_tasks_set) |set| {
+        const data_read = try std.posix.read(set.eventfd, &eventfd_val);
+        if (data_read != 8) unreachable;
 
-    const ring = &blocking_tasks_set.ring;
-    const nevents = try ring.copy_cqes(blocking_ready_tasks, 0);
-    for (blocking_ready_tasks[0..nevents]) |cqe| {
-        const blocking_task_data: *Loop.Scheduling.IO.BlockingTaskData = @ptrFromInt(cqe.user_data);
-        blocking_tasks_set.pop(blocking_task_data.id) catch unreachable;
-        _ = try CallbackManager.append_new_callback(allocator, ready_queue, blocking_task_data.data, Loop.MaxCallbacks);
+        const ring = &set.ring;
+        const nevents = try ring.copy_cqes(blocking_ready_tasks, 0);
+        for (blocking_ready_tasks[0..nevents]) |cqe| {
+            const blocking_task_data: *Loop.Scheduling.IO.BlockingTaskData = @ptrFromInt(cqe.user_data);
+            set.pop(blocking_task_data.id) catch unreachable;
+
+            _ = try CallbackManager.append_new_callback(allocator, ready_queue, blocking_task_data.data, Loop.MaxCallbacks);
+        }
+
+        if (set.free_items_count == Loop.Scheduling.IO.TotalItems) {
+            Loop.Scheduling.IO.remove_tasks_set(epoll_fd, blocking_tasks_queue, set);
+        }else{
+            event_fd = set.eventfd;
+        }
+    }else{
+        event_fd = loop.unlock_epoll_fd;
+
+        const data_read = try std.posix.read(event_fd, &eventfd_val);
+        if (data_read != 8) unreachable;
     }
 
-    if (blocking_tasks_set.free_items_count == Loop.Scheduling.IO.TotalItems) {
-        Loop.Scheduling.IO.remove_tasks_set(epoll_fd, blocking_tasks_queue, blocking_tasks_set);
-    }
+    var epoll_event: std.os.linux.epoll_event = .{
+        .events = std.os.linux.EPOLL.IN,
+        .data = std.os.linux.epoll_data{
+            .ptr = @intFromPtr(blocking_tasks_set)
+        }
+    };
+
+    try std.posix.epoll_ctl(epoll_fd, std.os.linux.EPOLL.CTL_ADD, event_fd, &epoll_event);
 }
 
 fn poll_blocking_events(
@@ -88,8 +108,13 @@ fn poll_blocking_events(
 
     const nevents = blk: {
         if (wait) {
+            loop.epoll_locked = true;
             mutex.unlock();
-            defer mutex.lock();
+            defer {
+                mutex.lock();
+                loop.epoll_locked = false;
+            }
+
             break :blk std.posix.epoll_wait(epoll_fd, blocking_ready_epoll_events, -1);
         }else{
             break :blk std.posix.epoll_wait(epoll_fd, blocking_ready_epoll_events, 0);
@@ -102,7 +127,7 @@ fn poll_blocking_events(
 
     for (blocking_ready_epoll_events[0..nevents]) |event| {
         try fetch_completed_tasks(
-            allocator, epoll_fd, blocking_tasks_queue, @ptrFromInt(event.data.ptr),
+            loop, allocator, epoll_fd, blocking_tasks_queue, @ptrFromInt(event.data.ptr),
             blocking_ready_tasks, ready_queue
         );
     }
@@ -150,7 +175,6 @@ pub fn start(self: *Loop) !void {
         ready_tasks_queue_index = 1 - ready_tasks_queue_index;
         self.ready_tasks_queue_index = ready_tasks_queue_index;
 
-        // TODO: Agregar eventfd para desbloquear epoll en caso que se agregue nuevo evento
         const ready_tasks_queue = &ready_tasks_queues[old_index];
         try poll_blocking_events(self, mutex, wait_for_blocking_events, ready_tasks_queue);
 

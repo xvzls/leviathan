@@ -19,6 +19,9 @@ blocking_ready_epoll_events: []std.os.linux.epoll_event,
 blocking_tasks_queue: LinkedList,
 blocking_ready_tasks: []std.os.linux.io_uring_cqe,
 
+unlock_epoll_fd: std.posix.fd_t = -1,
+epoll_locked: bool = false,
+
 max_callbacks_sets_per_queue: [2]usize,
 ready_tasks_queue_min_bytes_capacity: usize,
 
@@ -32,6 +35,10 @@ closed: bool = false,
 released: bool = false,
 
 pub fn init(self: *Loop, allocator: std.mem.Allocator, rtq_min_capacity: usize) !void {
+    if (self.released) {
+        @panic("Loop is released, can't be initialized");
+    }
+
     const max_callbacks_sets_per_queue = CallbackManager.get_max_callbacks_sets(
         rtq_min_capacity, MaxCallbacks
     );
@@ -82,6 +89,11 @@ pub fn release(self: *Loop) void {
     }
 
     const allocator = self.allocator;
+    if (!self.blocking_tasks_queue.is_empty()) {
+        // TODO: Implement logic for releasing blocking tasks
+        @panic("Loop has blocking tasks, can't be deallocated");
+    }
+
     for (&self.ready_tasks_queues) |*ready_tasks_queue| {
         const queue = &ready_tasks_queue.queue;
         for (0..queue.len) |_| {
@@ -90,14 +102,14 @@ pub fn release(self: *Loop) void {
         }
     }
 
-    if (!self.blocking_tasks_queue.is_empty()) {
-        // TODO: Implement logic for releasing blocking tasks
-        @panic("Loop has blocking tasks, can't be deallocated");
-    }
-
     if (self.blocking_tasks_epoll_fd != -1) {
         std.posix.close(self.blocking_tasks_epoll_fd);
     }
+
+    if (self.unlock_epoll_fd != -1) {
+        std.posix.close(self.unlock_epoll_fd);
+    }
+
     self.released = true;
 }
 

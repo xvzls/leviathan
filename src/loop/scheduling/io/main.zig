@@ -144,16 +144,17 @@ inline fn get_blocking_tasks_set(
         blocking_tasks_queue.unlink_node(new_node);
     }
 
-    const epoll_event: *std.os.linux.epoll_event = try allocator.create(std.os.linux.epoll_event);
-    errdefer allocator.destroy(epoll_event);
-
-    epoll_event.events = std.os.linux.EPOLL.IN;
-    epoll_event.data.ptr = @intFromPtr(new_set);
+    var epoll_event: std.os.linux.epoll_event = .{
+        .events = std.os.linux.EPOLL.IN,
+        .data = std.os.linux.epoll_data{
+            .ptr = @intFromPtr(new_set)
+        }
+    };
 
     blocking_tasks_queue.append_node(new_node);
     errdefer _ = blocking_tasks_queue.pop_node() catch unreachable;
 
-    try std.posix.epoll_ctl(epoll_fd, std.os.linux.EPOLL.CTL_ADD, new_set.eventfd, epoll_event);
+    try std.posix.epoll_ctl(epoll_fd, std.os.linux.EPOLL.CTL_ADD, new_set.eventfd, &epoll_event);
     return new_set;
 }
 
