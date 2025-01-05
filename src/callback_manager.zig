@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 const python_c = @import("python_c");
 
@@ -71,9 +72,23 @@ pub fn release_set(allocator: std.mem.Allocator, set: *CallbacksSet) void {
 }
 
 pub inline fn cancel_callback(callback: *Callback) void {
-    const type_info = @typeInfo(@TypeOf(callback.*));
-    // TODO: develop logic to cancel callback
-    _ = type_info;
+    const type_info = @typeInfo(CallbackType);
+    const tag = @intFromEnum(callback.*);
+    inline for (type_info.@"enum".fields) |field| {
+        if (field.value == tag) {
+            const data = &@field(callback, field.name);
+            const data_type = @TypeOf(data.*);
+            if (@hasField(data_type, "can_execute")) { // Any other event
+                data.can_execute = false;
+            }else if (@hasField(data_type, "cancelled")) { // Handle
+                if (builtin.single_threaded) {
+                    data.cancelled.* = true;
+                }else{
+                    @atomicStore(bool, data.cancelled, true, .monotonic);
+                }
+            }
+        }
+    }
 }
 
 pub inline fn append_new_callback(
