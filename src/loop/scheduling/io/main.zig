@@ -70,7 +70,7 @@ pub const BlockingTasksSet = struct {
         return node;
     }
 
-    pub inline fn push(self: *BlockingTasksSet, data: CallbackManger.Callback) !*BlockingTaskData {
+    pub fn push(self: *BlockingTasksSet, data: CallbackManger.Callback) !*BlockingTaskData {
         if (self.free_items_count == 0) {
             return error.NoFreeItems;
         }
@@ -100,6 +100,23 @@ pub const BlockingTasksSet = struct {
         self.free_items[busy_item_index] = id;
         self.busy_item_index = (busy_item_index + 1) % TotalItems;
         self.free_items_count += 1;
+    }
+
+    pub fn cancel_all(self: *BlockingTasksSet, loop: *Loop) !void {
+        var busy_item_index = self.busy_item_index;
+        var free_items_count = self.free_items_count;
+        defer self.free_items_count = free_items_count;
+
+        const tasks_data: []const BlockingTaskData = &self.tasks_data;
+        while (free_items_count < TotalItems) {
+            var callback = tasks_data[busy_item_index].data;
+            CallbackManger.cancel_callback(&callback);
+
+            try Loop.Scheduling.Soon.dispatch(loop, callback);
+
+            busy_item_index = (busy_item_index + 1) % TotalItems;
+            free_items_count += 1;
+        }
     }
 };
 

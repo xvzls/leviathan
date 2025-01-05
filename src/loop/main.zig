@@ -89,9 +89,14 @@ pub fn release(self: *Loop) void {
     }
 
     const allocator = self.allocator;
-    if (!self.blocking_tasks_queue.is_empty()) {
-        // TODO: Implement logic for releasing blocking tasks
-        @panic("Loop has blocking tasks, can't be deallocated");
+    const blocking_tasks_queue = &self.blocking_tasks_queue;
+    if (!blocking_tasks_queue.is_empty()) {
+        for (0..blocking_tasks_queue.len) |_| {
+            const set: *Scheduling.IO.BlockingTasksSet = @alignCast(
+                @ptrCast(blocking_tasks_queue.pop() catch unreachable)
+            );
+            set.cancel_all(self) catch unreachable;
+        }
     }
 
     for (&self.ready_tasks_queues) |*ready_tasks_queue| {

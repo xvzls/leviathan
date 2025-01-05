@@ -70,6 +70,12 @@ pub fn release_set(allocator: std.mem.Allocator, set: *CallbacksSet) void {
     allocator.destroy(set);
 }
 
+pub inline fn cancel_callback(callback: *Callback) void {
+    const type_info = @typeInfo(@TypeOf(callback.*));
+    // TODO: develop logic to cancel callback
+    _ = type_info;
+}
+
 pub inline fn append_new_callback(
     allocator: std.mem.Allocator, sets_queue: *CallbacksSetsQueue, callback: Callback,
     max_callbacks: usize
