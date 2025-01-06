@@ -23,15 +23,15 @@ inline fn free_callbacks_set(
     return next_node;
 }
 
-inline fn remove_exceded_callbacks(
-    loop: *Loop, index: usize, ready_tasks: *CallbackManager.CallbacksSetsQueue,
-    max_number_of_callbacks_set: usize
+pub fn prune_callbacks_sets(
+    allocator: std.mem.Allocator, ready_tasks: *CallbackManager.CallbacksSetsQueue,
+    max_number_of_callbacks_set_ptr: *usize, ready_tasks_queue_min_bytes_capacity: usize
 ) void {
     const queue = &ready_tasks.queue;
     var queue_len = queue.len;
+    const max_number_of_callbacks_set = max_number_of_callbacks_set_ptr.*;
     if (queue_len <= max_number_of_callbacks_set) return;
 
-    const allocator = loop.allocator;
     if (max_number_of_callbacks_set == 1) {
         var node = queue.last.?;
         while (queue_len > max_number_of_callbacks_set) : (queue_len -= 1) {
@@ -52,10 +52,23 @@ inline fn remove_exceded_callbacks(
         ready_tasks.last_set = node;
         queue.len = queue_len;
 
-        loop.max_callbacks_sets_per_queue[index] = CallbackManager.get_max_callbacks_sets(
-            loop.ready_tasks_queue_min_bytes_capacity, callbacks_set.callbacks.len
+        max_number_of_callbacks_set_ptr.* = CallbackManager.get_max_callbacks_sets(
+            ready_tasks_queue_min_bytes_capacity, callbacks_set.callbacks.len
         );
     }
+}
+
+pub inline fn call_once(
+    allocator: std.mem.Allocator, ready_queue: *CallbackManager.CallbacksSetsQueue,
+    max_number_of_callbacks_set_ptr: *usize, ready_tasks_queue_min_bytes_capacity: usize
+) CallbackManager.ExecuteCallbacksReturn {
+    const ret = CallbackManager.execute_callbacks(allocator, ready_queue, .Continue, true);
+    prune_callbacks_sets(
+        allocator, ready_queue, max_number_of_callbacks_set_ptr,
+        ready_tasks_queue_min_bytes_capacity
+    );
+
+    return ret;
 }
 
 inline fn fetch_completed_tasks(
@@ -135,16 +148,6 @@ fn poll_blocking_events(
     }
 }
 
-inline fn call_once(
-    loop: *Loop, index: usize, max_number_of_callbacks_set: usize,
-    ready_queue: *CallbackManager.CallbacksSetsQueue
-) CallbackManager.ExecuteCallbacksReturn {
-    const ret = CallbackManager.execute_callbacks(loop.allocator, ready_queue, .Continue, true);
-    remove_exceded_callbacks(loop, index, ready_queue, max_number_of_callbacks_set);
-
-    return ret;
-}
-
 pub fn start(self: *Loop) !void {
     const mutex = &self.mutex;
     mutex.lock();
@@ -166,10 +169,16 @@ pub fn start(self: *Loop) !void {
     }
 
     self.running = true;
-    defer self.running = false;
+    defer {
+        self.running = false;
+        self.stopping = false;
+    }
 
     const ready_tasks_queues: []CallbackManager.CallbacksSetsQueue = &self.ready_tasks_queues;
     const max_callbacks_set_per_queue: []usize = &self.max_callbacks_sets_per_queue;
+    const ready_tasks_queue_min_bytes_capacity = self.ready_tasks_queue_min_bytes_capacity;
+    const allocator = self.allocator;
+
     var ready_tasks_queue_index = self.ready_tasks_queue_index;
     var wait_for_blocking_events: bool = false;
     while (!self.stopping) {
@@ -185,7 +194,7 @@ pub fn start(self: *Loop) !void {
 
         wait_for_blocking_events = switch (
             call_once(
-                self, old_index, max_callbacks_set_per_queue[old_index], ready_tasks_queue
+                allocator, ready_tasks_queue, &max_callbacks_set_per_queue[old_index], ready_tasks_queue_min_bytes_capacity
             )
         ) {
             .Continue => false,
