@@ -144,6 +144,12 @@ pub fn init(loop: *Loop) !void {
 
 pub fn deinit(self: *UnixSignals) void {
     std.posix.close(self.fd);
+    var iter = self.callbacks.keyIterator();
+    while (iter.next()) |sig| {
+        const removed = self.callbacks.remove(sig.*);
+        if (!removed) @panic("Error removing signal");
+    }
+
     self.callbacks.deinit();
 }
 

@@ -41,8 +41,7 @@ inline fn z_loop_new(
         orelse return error.PythonError;
     errdefer python_c.py_decref(leave_task_func);
 
-    const loop_data = utils.get_data_ptr(Loop, instance);
-    loop_data.released = true;
+    @memset(&instance.data, 0);
 
     instance.asyncio_module = asyncio_module;
     instance.cancelled_error_exc = cancelled_error_exc;
@@ -70,7 +69,7 @@ pub fn loop_new(
 pub fn loop_clear(self: ?*LoopObject) callconv(.C) c_int {
     const py_loop = self.?;
     const loop_data = utils.get_data_ptr(Loop, py_loop);
-    if (!loop_data.released) {
+    if (loop_data.initialized) {
         loop_data.release();
     }
 

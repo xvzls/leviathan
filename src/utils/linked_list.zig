@@ -53,6 +53,8 @@ pub fn unlink_node(self: *wLinkedList, node: Node) void {
     }else{
         self.last = prev_node;
     }
+
+    self.allocator.destroy(node);
 }
 
 pub fn append_node(self: *wLinkedList, new_node: Node) void {

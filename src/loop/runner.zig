@@ -75,7 +75,9 @@ inline fn fetch_completed_tasks(
             const blocking_task_data: *Loop.Scheduling.IO.BlockingTaskData = @ptrFromInt(cqe.user_data);
             set.pop(blocking_task_data.id) catch unreachable;
 
-            _ = try CallbackManager.append_new_callback(allocator, ready_queue, blocking_task_data.data, Loop.MaxCallbacks);
+            _ = try CallbackManager.append_new_callback(
+                allocator, ready_queue, blocking_task_data.data, Loop.MaxCallbacks
+            );
         }
 
         if (set.free_items_count == Loop.Scheduling.IO.TotalItems) {
@@ -90,14 +92,14 @@ inline fn fetch_completed_tasks(
         if (data_read != 8) unreachable;
     }
 
-    var epoll_event: std.os.linux.epoll_event = .{
-        .events = std.os.linux.EPOLL.IN,
-        .data = std.os.linux.epoll_data{
-            .ptr = @intFromPtr(blocking_tasks_set)
-        }
-    };
+    // var epoll_event: std.os.linux.epoll_event = .{
+    //     .events = std.os.linux.EPOLL.IN,
+    //     .data = std.os.linux.epoll_data{
+    //         .ptr = @intFromPtr(blocking_tasks_set)
+    //     }
+    // };
 
-    try std.posix.epoll_ctl(epoll_fd, std.os.linux.EPOLL.CTL_ADD, event_fd, &epoll_event);
+    // try std.posix.epoll_ctl(epoll_fd, std.os.linux.EPOLL.CTL_ADD, event_fd, &epoll_event);
 }
 
 fn poll_blocking_events(

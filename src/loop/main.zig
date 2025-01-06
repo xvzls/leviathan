@@ -32,11 +32,12 @@ unix_signals: UnixSignals,
 running: bool = false,
 stopping: bool = false,
 closed: bool = false,
-released: bool = false,
+initialized: bool = false,
+
 
 pub fn init(self: *Loop, allocator: std.mem.Allocator, rtq_min_capacity: usize) !void {
-    if (self.released) {
-        @panic("Loop is released, can't be initialized");
+    if (self.initialized) {
+        @panic("Loop is already initialized");
     }
 
     const max_callbacks_sets_per_queue = CallbackManager.get_max_callbacks_sets(
@@ -77,6 +78,7 @@ pub fn init(self: *Loop, allocator: std.mem.Allocator, rtq_min_capacity: usize) 
 
     try UnixSignals.init(self);
 
+    self.initialized = true;
 }
 
 pub fn release(self: *Loop) void {
@@ -92,10 +94,13 @@ pub fn release(self: *Loop) void {
     const blocking_tasks_queue = &self.blocking_tasks_queue;
     if (!blocking_tasks_queue.is_empty()) {
         for (0..blocking_tasks_queue.len) |_| {
-            const set: *Scheduling.IO.BlockingTasksSet = @alignCast(
-                @ptrCast(blocking_tasks_queue.pop() catch unreachable)
+            const node: LinkedList.Node = @alignCast(
+                @ptrCast(blocking_tasks_queue.pop_node() catch unreachable)
             );
+            const set: *Scheduling.IO.BlockingTasksSet = @alignCast(@ptrCast(node.data.?));
             set.cancel_all(self) catch unreachable;
+            _ = set.deinit();
+            blocking_tasks_queue.release_node(node);
         }
     }
 
@@ -115,7 +120,12 @@ pub fn release(self: *Loop) void {
         std.posix.close(self.unlock_epoll_fd);
     }
 
-    self.released = true;
+    self.unix_signals.deinit();
+
+    allocator.free(self.blocking_ready_epoll_events);
+    allocator.free(self.blocking_ready_tasks);
+
+    self.initialized = false;
 }
 
 pub const Runner = @import("runner.zig");
