@@ -14,13 +14,15 @@ test "Creating a new callback set" {
 }
 
 fn test_callback(data: ?*anyopaque, status: CallbackManager.ExecuteCallbacksReturn) CallbackManager.ExecuteCallbacksReturn {
-    const executed_ptr: *bool = @alignCast(@ptrCast(data.?));
-    executed_ptr.* = true;
+    if (status != .Continue) return status;
+
+    const executed_ptr: *usize = @alignCast(@ptrCast(data.?));
+    executed_ptr.* += 1;
     return status;
 }
 
 test "Run callback" {
-    var executed: bool = false;
+    var executed: usize = 0;
 
     const ret = CallbackManager.run_callback(
         allocator, .{
@@ -31,7 +33,20 @@ test "Run callback" {
         }, .Continue
     );
     try std.testing.expectEqual(.Continue, ret);
-    try std.testing.expect(executed);
+    try std.testing.expectEqual(1, executed);
+
+    executed = 0;
+    const ret2 = CallbackManager.run_callback(
+        allocator, .{
+            .ZigGeneric = .{
+                .data = &executed,
+                .callback = &test_callback,
+                .can_execute = false
+            }
+        }, .Continue
+    );
+    try std.testing.expectEqual(.Continue, ret2);
+    try std.testing.expectEqual(0, executed);
 }
 
 test "Append multiple sets" {
@@ -81,7 +96,7 @@ test "Append new callback to set queue and execute it" {
         }
     }
 
-    var executed: bool = false;
+    var executed: usize = 0;
 
     const ret = try CallbackManager.append_new_callback(allocator, &set_queue, .{
         .ZigGeneric = .{
@@ -104,13 +119,55 @@ test "Append new callback to set queue and execute it" {
     try std.testing.expectEqual(10, callbacks_set.callbacks.len);
 
     _ = CallbackManager.execute_callbacks(allocator, &set_queue, .Continue, false);
-    try std.testing.expect(executed);
+    try std.testing.expectEqual(1, executed);
     try std.testing.expectEqual(0, callbacks_set.callbacks_num);
 
     callbacks_set.callbacks_num = 1;
-    executed = false;
+    executed = 0;
     _ = CallbackManager.execute_callbacks(allocator, &set_queue, .Continue, true);
-    try std.testing.expect(executed);
+    try std.testing.expectEqual(1, executed);
     try std.testing.expectEqual(0, callbacks_set.callbacks_num);
     try std.testing.expectEqual(set_queue.queue.first, set_queue.last_set);
+}
+
+test "Append multiple sets and cancelling callbacks" {
+    var set_queue = CallbackManager.CallbacksSetsQueue{
+        .queue = leviathan.utils.LinkedList.init(allocator)
+    };
+    defer {
+        for (0..set_queue.queue.len) |_| {
+            const callbacks_set: *CallbackManager.CallbacksSet = @alignCast(
+                @ptrCast(set_queue.queue.pop() catch unreachable)
+            );
+            CallbackManager.release_set(allocator, callbacks_set);
+        }
+    }
+
+    var executed: usize = 0;
+    for (0..70) |i| {
+        const callback = try CallbackManager.append_new_callback(allocator, &set_queue, .{
+            .ZigGeneric = .{
+                .data = &executed,
+                .callback = &test_callback
+            }
+        }, 10);
+
+        if (i % 2 == 0) {
+            CallbackManager.cancel_callback(callback);
+        }
+    }
+
+    try std.testing.expectEqual(3, set_queue.queue.len);
+    var node = set_queue.queue.first;
+    var callbacks_len: usize = 10;
+    while (node) |n| {
+        const callbacks_set: *CallbackManager.CallbacksSet = @alignCast(@ptrCast(n.data.?));
+        try std.testing.expectEqual(callbacks_len, callbacks_set.callbacks.len);
+        try std.testing.expectEqual(callbacks_len, callbacks_set.callbacks_num);
+        callbacks_len *= 2;
+        node = n.next;
+    }
+
+    _ = CallbackManager.execute_callbacks(allocator, &set_queue, .Continue, false);
+    try std.testing.expectEqual(35, executed);
 }
