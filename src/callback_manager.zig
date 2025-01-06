@@ -131,7 +131,16 @@ pub inline fn run_callback(
     switch (status) {
         .Continue => {
             return switch (callback) {
-                .ZigGeneric => |data| data.callback(data.data, if (data.can_execute) status else .Stop),
+                .ZigGeneric => |data| blk: {
+                    if (data.can_execute) {
+                        break :blk data.callback(data.data, status);
+                    }else{
+                        break :blk switch (data.callback(data.data, .Stop)) {
+                            .Exception => .Exception,
+                            else => .Continue
+                        };
+                    }
+                },
                 .PythonGeneric => |data| Handle.callback_for_python_generic_callbacks(allocator, data),
                 .PythonFutureCallbacksSet => |data| Future.Callback.run_python_future_set_callbacks(
                     allocator, data, status
