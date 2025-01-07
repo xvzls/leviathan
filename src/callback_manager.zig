@@ -128,47 +128,52 @@ pub inline fn append_new_callback(
 pub inline fn run_callback(
     allocator: std.mem.Allocator, callback: Callback, status: ExecuteCallbacksReturn
 ) ExecuteCallbacksReturn {
-    switch (status) {
-        .Continue => {
-            return switch (callback) {
-                .ZigGeneric => |data| blk: {
-                    if (data.can_execute) {
-                        break :blk data.callback(data.data, status);
-                    }else{
-                        break :blk switch (data.callback(data.data, .Stop)) {
-                            .Exception => .Exception,
-                            else => .Continue
-                        };
-                    }
-                },
-                .PythonGeneric => |data| Handle.callback_for_python_generic_callbacks(allocator, data),
-                .PythonFutureCallbacksSet => |data| Future.Callback.run_python_future_set_callbacks(
-                    allocator, data, status
-                ),
-                .PythonFuture => |data| Future.Callback.callback_for_python_future_callbacks(data),
-                .PythonTask => |data| Task.Callback.step_run_and_handle_result(data.task, data.exc_value),
-            };
+    return switch (status) {
+        .Continue => switch (callback) {
+            .ZigGeneric => |data| blk: {
+                if (data.can_execute) {
+                    break :blk data.callback(data.data, status);
+                }else{
+                    break :blk switch (data.callback(data.data, .Stop)) {
+                        .Exception => .Exception,
+                        else => .Continue
+                    };
+                }
+            },
+            .PythonGeneric => |data| Handle.callback_for_python_generic_callbacks(allocator, data),
+            .PythonFutureCallbacksSet => |data| Future.Callback.run_python_future_set_callbacks(
+                allocator, data, status
+            ),
+            .PythonFuture => |data| Future.Callback.callback_for_python_future_callbacks(data),
+            .PythonTask => |data| Task.Callback.step_run_and_handle_result(data.task, data.exc_value),
         },
-        else => {
-            switch (callback) {
-                .ZigGeneric => |data| {
-                    _  = data.callback(data.data, status);
+        else => blk: {
+            const ret: ExecuteCallbacksReturn = switch (callback) {
+                .ZigGeneric => |data| data.callback(data.data, .Stop),
+                .PythonGeneric => |data| {
+                    Handle.release_python_generic_callback(allocator, data);
+                    break :blk .Continue;
                 },
-                .PythonGeneric => |data| Handle.release_python_generic_callback(allocator, data),
-                .PythonFutureCallbacksSet => |data| {
-                    _ = Future.Callback.run_python_future_set_callbacks(
-                        allocator, data, status
-                    );
+                .PythonFutureCallbacksSet => |data| Future.Callback.run_python_future_set_callbacks(
+                    allocator, data, .Stop
+                ),
+                .PythonFuture => |data| {
+                    Future.Callback.release_python_future_callback(data);
+                    break :blk .Continue;
                 },
-                .PythonFuture => |data| Future.Callback.release_python_future_callback(data),
-                .PythonTask => |data| {
+                .PythonTask => |data| blk2: {
                     data.task.must_cancel = true;
-                    _ = Task.Callback.step_run_and_handle_result(data.task, data.exc_value);
-                },
+                    break :blk2 Task.Callback.step_run_and_handle_result(data.task, data.exc_value);
+                }
+            };
+
+            if (ret == .Exception) {
+                @panic("Unexpected exception status. Can't exists exception status while releasing resources.");
             }
-            return .Continue;
+
+            break :blk .Continue;
         }
-    }
+    };
 }
 
 pub fn execute_callbacks(
@@ -199,11 +204,8 @@ pub fn execute_callbacks(
         for (callbacks_set.callbacks[0..callbacks_num]) |callback| {
             switch (run_callback(allocator, callback, status)) {
                 .Continue => {},
-                .Stop => {
-                    status = .Stop;
-                },
-                .Exception => {
-                    status = .Exception;
+                .Stop, .Exception => |v| {
+                    status = v;
                 },
                 else => unreachable
             }
