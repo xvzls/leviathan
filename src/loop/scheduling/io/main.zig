@@ -158,7 +158,7 @@ inline fn get_blocking_tasks_set(
     const new_set = try BlockingTasksSet.init(allocator, new_node);
     errdefer {
         _ = new_set.deinit();
-        blocking_tasks_queue.unlink_node(new_node);
+        blocking_tasks_queue.unlink_node(new_node) catch unreachable;
     }
 
     var epoll_event: std.os.linux.epoll_event = .{
@@ -181,7 +181,7 @@ pub inline fn remove_tasks_set(
 ) void {
     std.posix.epoll_ctl(epoll_fd, std.os.linux.EPOLL.CTL_DEL, blocking_tasks_set.eventfd, null) catch unreachable;
     const node = blocking_tasks_set.deinit();
-    blocking_tasks_queue.unlink_node(node);
+    blocking_tasks_queue.unlink_node(node) catch unreachable;
 }
 
 pub fn queue(self: *Loop, event: BlockingOperationData) !void {

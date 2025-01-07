@@ -13,6 +13,27 @@ loop: *Loop,
 
 signalfd_info: std.os.linux.signalfd_siginfo = undefined,
 
+// ------------------------------------------------------------------------
+// Temporal functions waiting for merge: https://github.com/ziglang/zig/pull/22406
+const usize_bits = @sizeOf(usize) * 8;
+pub fn sigaddset(set: *std.posix.sigset_t, sig: u6) void {
+    const s = sig - 1;
+    // shift in musl: s&8*sizeof *set->__bits-1
+    const shift = @as(u5, @intCast(s & (usize_bits - 1)));
+    const val = @as(u32, @intCast(1)) << shift;
+    (set.*)[@as(usize, @intCast(s)) / usize_bits] |= val;
+}
+
+pub fn sigdelset(set: *std.posix.sigset_t, sig: u6) void {
+    const s = sig - 1;
+    // shift in musl: s&8*sizeof *set->__bits-1
+    const shift = @as(u5, @intCast(s & (usize_bits - 1)));
+    const val = @as(u32, @intCast(1)) << shift;
+    (set.*)[@as(usize, @intCast(s)) / usize_bits] ^= val;
+}
+// ------------------------------------------------------------------------
+    
+
 fn signal_handler(
     data: ?*anyopaque, status: CallbackManager.ExecuteCallbacksReturn
 ) CallbackManager.ExecuteCallbacksReturn {
@@ -55,23 +76,21 @@ fn signal_handler(
     return .Continue;
 }
 
-fn default_sigterm_signal_callback(
-    _: ?*anyopaque, _: CallbackManager.ExecuteCallbacksReturn
-) CallbackManager.ExecuteCallbacksReturn {
-    python_c.PyErr_SetString(python_c.PyExc_SystemExit, "SIGTERM received");
-    return .Exception;
-}
-
 fn default_sigint_signal_callback(
     _: ?*anyopaque, _: CallbackManager.ExecuteCallbacksReturn
 ) CallbackManager.ExecuteCallbacksReturn {
-    python_c.PyErr_SetString(python_c.PyExc_KeyboardInterrupt, "SIGINT received");
+    python_c.PyErr_SetNone(python_c.PyExc_KeyboardInterrupt);
     return .Exception;
 }
 
 pub inline fn link(self: *UnixSignals, sig: u6, callback: CallbackManager.Callback) !void {
     try self.callbacks.put(sig, callback);
     self.callbacks.rehash();
+
+    const mask = &self.mask;
+    sigaddset(mask, sig);
+    std.posix.sigprocmask(std.os.linux.SIG.BLOCK, mask, null);
+    self.fd = try std.posix.signalfd(self.fd, mask, 0);
 }
 
 pub fn unlink(self: *UnixSignals, sig: u6) !void {
@@ -84,13 +103,15 @@ pub fn unlink(self: *UnixSignals, sig: u6) !void {
                 .callback = &default_sigint_signal_callback,
             }
         },
-        std.os.linux.SIG.TERM => CallbackManager.Callback{
-            .ZigGeneric = .{
-                .data = self.loop,
-                .callback = &default_sigterm_signal_callback,
-            }
-        },
-        else => return
+        else => {
+            var mask: std.posix.sigset_t = std.posix.empty_sigset;
+
+            sigaddset(&mask, sig);
+            std.posix.sigprocmask(std.os.linux.SIG.UNBLOCK, &mask, null);
+
+            sigdelset(&self.mask, sig);
+            self.fd = try std.posix.signalfd(self.fd, &self.mask, 0);
+        }
     };
 
     try self.callbacks.put(sig, callback);
@@ -98,7 +119,6 @@ pub fn unlink(self: *UnixSignals, sig: u6) !void {
 
 pub fn init(loop: *Loop) !void {
     var mask: std.posix.sigset_t = std.posix.empty_sigset;
-    std.c.sigfillset(&mask);
     const fd = try std.posix.signalfd(-1, &mask, 0);
 
     loop.unix_signals = .{
@@ -107,29 +127,23 @@ pub fn init(loop: *Loop) !void {
         .mask = mask,
         .loop = loop
     };
-    errdefer loop.unix_signals.deinit();
+    const unix_signals = &loop.unix_signals;
+    errdefer unix_signals.deinit();
 
-    try loop.unix_signals.link(std.os.linux.SIG.INT, CallbackManager.Callback{
+    try unix_signals.link(std.os.linux.SIG.INT, CallbackManager.Callback{
         .ZigGeneric = .{
             .data = loop,
             .callback = &default_sigint_signal_callback,
         }
     });
 
-    try loop.unix_signals.link(std.os.linux.SIG.TERM, CallbackManager.Callback{
-        .ZigGeneric = .{
-            .data = loop,
-            .callback = &default_sigterm_signal_callback,
-        }
-    });
-
     const buffer_to_read: std.os.linux.IoUring.ReadBuffer = .{
-        .buffer = @as([*]u8, @ptrCast(&loop.unix_signals.signalfd_info))[0..@sizeOf(std.os.linux.signalfd_siginfo)],
+        .buffer = @as([*]u8, @ptrCast(&unix_signals.signalfd_info))[0..@sizeOf(std.os.linux.signalfd_siginfo)],
     };
 
     try Loop.Scheduling.IO.queue(loop, Loop.Scheduling.IO.BlockingOperationData{
         .PerformRead = .{
-            .fd = loop.unix_signals.fd,
+            .fd = unix_signals.fd,
             .data = buffer_to_read,
             .callback = CallbackManager.Callback{
                 .ZigGeneric = .{
