@@ -1,0 +1,88 @@
+const std = @import("std");
+const builtin = @import("builtin");
+
+const python_c = @import("python_c");
+const PyObject = *python_c.PyObject;
+
+const Handle = @import("handle.zig");
+const utils = @import("utils/utils.zig");
+
+
+pub const PythonTimerHandleObject = extern struct {
+    handle: Handle.PythonHandleObject,
+    when: f64
+};
+
+const PythonTimerHandleMethods: []const python_c.PyMethodDef = &[_]python_c.PyMethodDef{
+    python_c.PyMethodDef{
+        .ml_name = "when\x00",
+        .ml_meth = @ptrCast(&timer_handle_when),
+        .ml_doc = "Return a scheduled callback time as float seconds.\x00",
+        .ml_flags = python_c.METH_NOARGS
+    },
+    python_c.PyMethodDef{
+        .ml_name = null, .ml_meth = null, .ml_doc = null, .ml_flags = 0
+    }
+};
+
+pub inline fn fast_new_timer_handle(ts: f64, contextvars: PyObject) !*PythonTimerHandleObject {
+    const instance: *PythonTimerHandleObject = @ptrCast(
+        PythonTimerHandleType.tp_alloc.?(&PythonTimerHandleType, 0) orelse return error.PythonError
+    );
+    instance.handle.contextvars = contextvars;
+    instance.handle.cancelled = false;
+    instance.when = ts;
+
+    return instance;
+}
+
+inline fn z_timer_handle_init(
+    self: *PythonTimerHandleObject, args: ?PyObject, kwargs: ?PyObject
+) !c_int {
+    var kwlist: [3][*c]u8 = undefined;
+    kwlist[0] = @constCast("ts\x00");
+    kwlist[1] = @constCast("context\x00");
+    kwlist[2] = null;
+
+    var ts: f64 = 0.0;
+    var py_context: ?PyObject = null;
+
+    if (python_c.PyArg_ParseTupleAndKeywords(
+            args, kwargs, "dO\x00", @ptrCast(&kwlist), &ts, &py_context
+    ) < 0) {
+        return error.PythonError;
+    }
+
+    if (py_context) |ctx| {
+        if (python_c.Py_IsNone(ctx) != 0) {
+            utils.put_python_runtime_error_message("context cannot be None\x00");
+            return error.PythonError;
+        }
+    }
+
+    self.contextvars = python_c.py_newref(py_context.?);
+    self.when = ts;
+
+    return 0;
+}
+
+fn handle_init(self: ?*PythonTimerHandleObject, args: ?PyObject, kwargs: ?PyObject) callconv(.C) c_int {
+    return utils.execute_zig_function(z_timer_handle_init, .{self.?, args, kwargs});
+}
+
+pub fn timer_handle_when(self: ?*PythonTimerHandleObject, _: ?PyObject) callconv(.C) ?PyObject {
+    return python_c.PyFloat_FromDouble(self.?.when);
+}
+
+pub var PythonTimerHandleType = python_c.PyTypeObject{
+    .tp_name = "leviathan.TimerHandle\x00",
+    .tp_doc = "Leviathan's handle class\x00",
+    .tp_base = &Handle.PythonHandleType,
+    .tp_basicsize = @sizeOf(PythonTimerHandleObject),
+    .tp_itemsize = 0,
+    .tp_flags = python_c.Py_TPFLAGS_DEFAULT | python_c.Py_TPFLAGS_BASETYPE,
+    .tp_new = &python_c.PyType_GenericNew,
+    .tp_init = @ptrCast(&handle_init),
+    .tp_methods = @constCast(PythonTimerHandleMethods.ptr),
+};
+

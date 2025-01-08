@@ -48,8 +48,20 @@ const PythonLoopMethods: []const python_c.PyMethodDef = &[_]python_c.PyMethodDef
         .ml_doc = "Schedule callback to be called with args arguments at the next iteration of the event loop.\x00",
         .ml_flags = python_c.METH_FASTCALL | python_c.METH_KEYWORDS
     },
+    python_c.PyMethodDef{
+        .ml_name = "call_soon_threadsafe\x00",
+        .ml_meth = @ptrCast(&Scheduling.loop_call_soon_threadsafe),
+        .ml_doc = "Thread-safe variant of `call_soon`.\x00",
+        .ml_flags = python_c.METH_FASTCALL | python_c.METH_KEYWORDS
+    },
 
     // --------------------- Utils ---------------------
+    python_c.PyMethodDef{
+        .ml_name = "time\x00",
+        .ml_meth = @ptrCast(&Utils.Time.loop_time),
+        .ml_doc = "Return the current time, as a float value, according to the event loop’s internal monotonic clock.\x00",
+        .ml_flags = python_c.METH_NOARGS
+    },
     python_c.PyMethodDef{
         .ml_name = "create_future\x00",
         .ml_meth = @ptrCast(&Utils.Future.loop_create_future),

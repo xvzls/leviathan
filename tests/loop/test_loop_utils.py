@@ -3,6 +3,7 @@ from leviathan import Loop, ThreadSafeLoop
 
 from contextvars import Context, copy_context
 from unittest.mock import AsyncMock
+from time import monotonic
 from typing import Type
 
 import pytest, asyncio
@@ -43,5 +44,15 @@ def test_create_task_with_context(loop_obj: Type[asyncio.AbstractEventLoop]) -> 
         loop.call_soon(loop.stop)
         loop.run_forever()
         assert task.result()
+    finally:
+        loop.close()
+
+@pytest.mark.parametrize("loop_obj", [Loop, ThreadSafeLoop])
+def test_time(loop_obj: Type[asyncio.AbstractEventLoop]) -> None:
+    loop = loop_obj()
+    try:
+        py_monotonic = monotonic()
+        loop_monotonic = loop.time()
+        assert abs(py_monotonic - loop_monotonic) < 0.1
     finally:
         loop.close()

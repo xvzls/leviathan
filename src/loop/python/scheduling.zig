@@ -10,6 +10,7 @@ const Handle = @import("../../handle.zig");
 const LoopObject = Loop.Python.LoopObject;
 
 const std = @import("std");
+const builtin = @import("builtin");
 
 inline fn get_py_context(knames: ?PyObject, args_ptr: [*]?PyObject, loop: *LoopObject) !PyObject {
     var context: ?PyObject = null;
@@ -117,6 +118,19 @@ inline fn z_loop_call_soon(
 pub fn loop_call_soon(
     self: ?*LoopObject, args: ?[*]?PyObject, nargs: isize, knames: ?PyObject
 ) callconv(.C) ?*Handle.PythonHandleObject {
+    return utils.execute_zig_function(z_loop_call_soon, .{
+        self.?, args.?[0..@as(usize, @intCast(nargs))], knames
+    });
+}
+
+pub fn loop_call_soon_threadsafe(
+    self: ?*LoopObject, args: ?[*]?PyObject, nargs: isize, knames: ?PyObject
+) callconv(.C) ?*Handle.PythonHandleObject {
+    if (builtin.single_threaded) {
+        utils.put_python_runtime_error_message("Loop.call_soon_threadsafe is not supported\x00");
+        return null;
+    }
+
     return utils.execute_zig_function(z_loop_call_soon, .{
         self.?, args.?[0..@as(usize, @intCast(nargs))], knames
     });

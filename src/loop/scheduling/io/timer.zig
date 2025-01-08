@@ -10,7 +10,7 @@ pub const DelayType = enum(u32) {
 
 pub const WaitData = struct {
     callback: CallbackManager.Callback,
-    duration: std.os.linux.kernel_timespec,
+    duration: std.os.linux.timespec,
     delay_type: DelayType
 };
 
@@ -19,7 +19,31 @@ pub fn wait(set: *IO.BlockingTasksSet, data: WaitData) !void {
     errdefer set.pop(data_ptr.id) catch unreachable;
 
     const ring: *std.os.linux.IoUring = &set.ring;
-    _ = try ring.timeout(@intCast(@intFromPtr(data_ptr)), &data.duration, 0, @intFromEnum(data.delay_type));
+
+    const timespec_sec_info = @typeInfo(@FieldType(std.os.linux.timespec, "sec")).int;
+    const kernel_timespec_sec_info = @typeInfo(@FieldType(std.os.linux.kernel_timespec, "sec")).int;
+    if (
+        timespec_sec_info.bits == kernel_timespec_sec_info.bits and
+        timespec_sec_info.signedness == kernel_timespec_sec_info.signedness
+    ) {
+        _ = try ring.timeout(
+            @intCast(@intFromPtr(data_ptr)),
+            @ptrCast(&data.duration), 0,
+            @intFromEnum(data.delay_type)
+        );
+    }else{
+        const k_duration: std.os.linux.kernel_timespec = .{
+            .sec = data.duration.tv_sec,
+            .nsec = data.duration.tv_nsec
+        };
+
+        _ = try ring.timeout(
+            @intCast(@intFromPtr(data_ptr)),
+            &k_duration, 0,
+            @intFromEnum(data.delay_type)
+        );
+    }
+
     const ret = try ring.submit();
     if (ret != 1) {
         @panic("Unexpected number of submitted sqes");
