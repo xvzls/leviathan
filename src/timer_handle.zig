@@ -10,28 +10,16 @@ const utils = @import("utils/utils.zig");
 
 pub const PythonTimerHandleObject = extern struct {
     handle: Handle.PythonHandleObject,
-    when: f64
+    when: std.posix.timespec
 };
 
-const PythonTimerHandleMethods: []const python_c.PyMethodDef = &[_]python_c.PyMethodDef{
-    python_c.PyMethodDef{
-        .ml_name = "when\x00",
-        .ml_meth = @ptrCast(&timer_handle_when),
-        .ml_doc = "Return a scheduled callback time as float seconds.\x00",
-        .ml_flags = python_c.METH_NOARGS
-    },
-    python_c.PyMethodDef{
-        .ml_name = null, .ml_meth = null, .ml_doc = null, .ml_flags = 0
-    }
-};
-
-pub inline fn fast_new_timer_handle(ts: f64, contextvars: PyObject) !*PythonTimerHandleObject {
+pub inline fn fast_new_timer_handle(time: std.posix.timespec, contextvars: PyObject) !*PythonTimerHandleObject {
     const instance: *PythonTimerHandleObject = @ptrCast(
         PythonTimerHandleType.tp_alloc.?(&PythonTimerHandleType, 0) orelse return error.PythonError
     );
     instance.handle.contextvars = contextvars;
     instance.handle.cancelled = false;
-    instance.when = ts;
+    instance.when = time;
 
     return instance;
 }
@@ -60,8 +48,13 @@ inline fn z_timer_handle_init(
         }
     }
 
-    self.contextvars = python_c.py_newref(py_context.?);
-    self.when = ts;
+    self.handle.contextvars = python_c.py_newref(py_context.?);
+
+    const ts_sec = @trunc(ts);
+    self.when = .{
+        .sec = @intFromFloat(ts_sec),
+        .nsec = @as(@FieldType(std.posix.timespec, "nsec"), @intFromFloat((ts - ts_sec) * std.time.ns_per_s))
+    };
 
     return 0;
 }
@@ -71,8 +64,22 @@ fn handle_init(self: ?*PythonTimerHandleObject, args: ?PyObject, kwargs: ?PyObje
 }
 
 pub fn timer_handle_when(self: ?*PythonTimerHandleObject, _: ?PyObject) callconv(.C) ?PyObject {
-    return python_c.PyFloat_FromDouble(self.?.when);
+    const time = self.?.when;
+    const when = @as(f64, @floatFromInt(time.sec)) + @as(f64, @floatFromInt(time.nsec)) / std.time.ns_per_s;
+    return python_c.PyFloat_FromDouble(when);
 }
+
+const PythonTimerHandleMethods: []const python_c.PyMethodDef = &[_]python_c.PyMethodDef{
+    python_c.PyMethodDef{
+        .ml_name = "when\x00",
+        .ml_meth = @ptrCast(&timer_handle_when),
+        .ml_doc = "Return a scheduled callback time as float seconds.\x00",
+        .ml_flags = python_c.METH_NOARGS
+    },
+    python_c.PyMethodDef{
+        .ml_name = null, .ml_meth = null, .ml_doc = null, .ml_flags = 0
+    }
+};
 
 pub var PythonTimerHandleType = python_c.PyTypeObject{
     .tp_name = "leviathan.TimerHandle\x00",

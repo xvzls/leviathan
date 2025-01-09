@@ -9,12 +9,14 @@ const future = leviathan.Future;
 const task = leviathan.Task;
 const loop = leviathan.Loop;
 const handle = leviathan.Handle;
+const timer_handle = leviathan.TimerHandle;
 
 const leviathan_types = .{
     &future.Python.FutureType,
     &task.PythonTaskType,
     &loop.Python.LoopType,
-    &handle.PythonHandleType
+    &handle.PythonHandleType,
+    &timer_handle.PythonTimerHandleType
 };
 
 fn on_module_exit() callconv(.C) void {
@@ -49,7 +51,8 @@ fn initialize_python_module() !*python_c.PyObject {
         "Future\x00",
         "Task\x00",
         "Loop\x00",
-        "Handle\x00"
+        "Handle\x00",
+        "TimerHandle\x00"
     };
 
     inline for (leviathan_modules_name, leviathan_types) |leviathan_module_name, leviathan_module_obj| {

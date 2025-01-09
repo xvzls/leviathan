@@ -6,6 +6,7 @@ const utils = @import("../../utils/utils.zig");
 const CallbackManager = @import("../../callback_manager.zig");
 const Loop = @import("../main.zig");
 const Handle = @import("../../handle.zig");
+const TimerHandle = @import("../../timer_handle.zig");
 
 const LoopObject = Loop.Python.LoopObject;
 
@@ -133,5 +134,102 @@ pub fn loop_call_soon_threadsafe(
 
     return utils.execute_zig_function(z_loop_call_soon, .{
         self.?, args.?[0..@as(usize, @intCast(nargs))], knames
+    });
+}
+
+inline fn z_loop_delayed_call(
+    self: *LoopObject, args: []?PyObject,
+    knames: ?PyObject, comptime is_absolute: bool
+) !*TimerHandle.PythonTimerHandleObject {
+    const context = try get_py_context(knames, args.ptr + args.len, self);
+    errdefer python_c.py_decref(context);
+
+    const loop_data = utils.get_data_ptr(Loop, self);
+    const allocator = loop_data.allocator;
+
+    const callback_info = try get_callback_info(allocator, args[1..]);
+    errdefer {
+        for (callback_info) |arg| {
+            python_c.py_decref(@ptrCast(arg));
+        }
+        allocator.free(callback_info);
+    }
+
+    const time: std.posix.timespec = blk: {
+        const ts: f64 = python_c.PyFloat_AsDouble(args[0].?);
+        if (is_absolute) {
+            const when_sec = @trunc(ts);
+            break :blk .{
+                .sec = @intFromFloat(when_sec),
+                .nsec = @as(@FieldType(std.posix.timespec, "nsec"), @intFromFloat((ts - when_sec) * std.time.ns_per_s))
+            };
+        }else{
+            var _time: std.posix.timespec = undefined;
+            try std.posix.clock_gettime(.MONOTONIC, &_time);
+
+            const delay_sec = @trunc(ts);
+
+            _time.sec += @intFromFloat(delay_sec);
+            _time.nsec += @as(@FieldType(std.posix.timespec, "nsec"), @intFromFloat((ts - delay_sec) * std.time.ns_per_s));
+
+            break :blk _time;
+        }
+    };
+
+    const contextvars_run_func: PyObject = python_c.PyObject_GetAttrString(context, "run\x00")
+        orelse return error.PythonError;
+    errdefer python_c.py_decref(contextvars_run_func);
+
+    const py_timer_handle: *TimerHandle.PythonTimerHandleObject = try TimerHandle.fast_new_timer_handle(time, context);
+    errdefer python_c.py_decref(@ptrCast(py_timer_handle));
+
+    const mutex = &loop_data.mutex;
+    mutex.lock();
+    defer mutex.unlock();
+
+    if (!loop_data.initialized) {
+        utils.put_python_runtime_error_message("Loop is closed\x00");
+        return error.PythonError;
+    }
+
+    if (loop_data.stopping) {
+        utils.put_python_runtime_error_message("Loop is stopping\x00");
+        return error.PythonError;
+    }
+
+    const callback: CallbackManager.Callback = .{
+        .PythonGeneric = .{
+            .args = callback_info,
+            .exception_handler = self.exception_handler.?,
+            .py_callback = contextvars_run_func,
+            .py_handle = @ptrCast(py_timer_handle),
+            .cancelled = &py_timer_handle.handle.cancelled
+        }
+    };
+    try Loop.Scheduling.IO.queue(loop_data, .{
+        .WaitTimer = .{
+            .callback = callback,
+            .duration = time,
+            .delay_type = .Absolute
+        }
+    });
+    return python_c.py_newref(py_timer_handle);
+}
+pub fn loop_call_later(
+    self: ?*LoopObject, args: ?[*]?PyObject, nargs: isize, knames: ?PyObject
+) callconv(.C) ?*TimerHandle.PythonTimerHandleObject {
+    return utils.execute_zig_function(z_loop_delayed_call, .{
+        self.?, args.?[0..@as(usize, @intCast(nargs))], knames,
+        false
+    });
+}
+
+pub fn loop_call_at(
+    self: ?*LoopObject, args: ?[*]?PyObject, nargs: isize, knames: ?PyObject
+) callconv(.C) ?*TimerHandle.PythonTimerHandleObject {
+    
+    return utils.execute_zig_function(z_loop_delayed_call, .{
+        self.?, args.?[0..@as(usize, @intCast(nargs))], knames,
+        true
     });
 }

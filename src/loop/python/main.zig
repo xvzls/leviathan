@@ -54,6 +54,18 @@ const PythonLoopMethods: []const python_c.PyMethodDef = &[_]python_c.PyMethodDef
         .ml_doc = "Thread-safe variant of `call_soon`.\x00",
         .ml_flags = python_c.METH_FASTCALL | python_c.METH_KEYWORDS
     },
+    python_c.PyMethodDef{
+        .ml_name = "call_later\x00",
+        .ml_meth = @ptrCast(&Scheduling.loop_call_later),
+        .ml_doc = "Thread-safe variant of `call_soon`.\x00",
+        .ml_flags = python_c.METH_FASTCALL | python_c.METH_KEYWORDS
+    },
+    python_c.PyMethodDef{
+        .ml_name = "call_at\x00",
+        .ml_meth = @ptrCast(&Scheduling.loop_call_at),
+        .ml_doc = "Thread-safe variant of `call_soon`.\x00",
+        .ml_flags = python_c.METH_FASTCALL | python_c.METH_KEYWORDS
+    },
 
     // --------------------- Utils ---------------------
     python_c.PyMethodDef{
