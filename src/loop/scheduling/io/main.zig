@@ -11,7 +11,8 @@ pub const Timer = @import("timer.zig");
 
 pub const BlockingTaskData = struct {
     id: usize,
-    data: CallbackManger.Callback
+    data: CallbackManger.Callback,
+    released: bool = true
 };
 
 pub const TotalItems = 1024;
@@ -52,6 +53,14 @@ pub const BlockingTasksSet = struct {
             item.* = i;
         }
 
+        for (&set.tasks_data) |*task_data| {
+            task_data.* = .{
+                .id = undefined,
+                .data = undefined,
+                .released = true
+            };
+        }
+
         node.data = set;
         return set;
     }
@@ -84,17 +93,21 @@ pub const BlockingTasksSet = struct {
         task_data.* = .{
             .id = index,
             .data = data,
+            .released = false
         };
 
         return task_data;
     }
 
-    pub inline fn pop(self: *BlockingTasksSet, id: usize) !void {
+    pub inline fn pop(self: *BlockingTasksSet, data: *BlockingTaskData) !void {
+        const id = data.id;
         if (self.free_items_count == TotalItems) {
             return error.NoBusyItems;
         }else if (id >= TotalItems) {
             return error.InvalidID;
         }
+
+        data.released = true;
 
         const busy_item_index = self.busy_item_index;
         self.free_items[busy_item_index] = id;
@@ -103,19 +116,11 @@ pub const BlockingTasksSet = struct {
     }
 
     pub fn cancel_all(self: *BlockingTasksSet, loop: *Loop) !void {
-        var busy_item_index = self.busy_item_index;
-        var free_items_count = self.free_items_count;
-        defer self.free_items_count = free_items_count;
-
-        const tasks_data: []const BlockingTaskData = &self.tasks_data;
-        while (free_items_count < TotalItems) {
-            var callback = tasks_data[busy_item_index].data;
-            CallbackManger.cancel_callback(&callback);
-
-            try Loop.Scheduling.Soon.dispatch(loop, callback);
-
-            busy_item_index = (busy_item_index + 1) % TotalItems;
-            free_items_count += 1;
+        for (&self.tasks_data) |*task_data| {
+            if (!task_data.released) {
+                self.pop(task_data) catch unreachable;
+                try Loop.Scheduling.Soon.dispatch(loop, task_data.data);
+            }
         }
     }
 };

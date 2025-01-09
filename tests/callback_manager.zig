@@ -161,7 +161,7 @@ test "Append and cancel callbacks" {
         }, 10);
 
         if (i % 2 == 0) {
-            CallbackManager.cancel_callback(callback);
+            callback.ZigGeneric.can_execute = false;
         }
     }
 
@@ -198,7 +198,7 @@ test "Append and stopping with exception" {
         }, 10);
 
         if (i % 2 == 0) {
-            CallbackManager.cancel_callback(callback);
+            callback.ZigGeneric.can_execute = false;
         }
     }
 

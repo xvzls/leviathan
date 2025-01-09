@@ -86,7 +86,7 @@ inline fn fetch_completed_tasks(
         const nevents = try ring.copy_cqes(blocking_ready_tasks, 0);
         for (blocking_ready_tasks[0..nevents]) |cqe| {
             const blocking_task_data: *Loop.Scheduling.IO.BlockingTaskData = @ptrFromInt(cqe.user_data);
-            set.pop(blocking_task_data.id) catch unreachable;
+            set.pop(blocking_task_data) catch unreachable;
 
             _ = try CallbackManager.append_new_callback(
                 allocator, ready_queue, blocking_task_data.data, Loop.MaxCallbacks
