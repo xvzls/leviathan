@@ -135,3 +135,75 @@ def test_call_later_with_context(loop_obj: Type[asyncio.AbstractEventLoop]) -> N
         assert mock_func.call_args_list == expected_calls
     finally:
         loop.close()
+
+
+@pytest.mark.parametrize("loop_obj", [Loop, ThreadSafeLoop])
+def test_call_at(loop_obj: Type[asyncio.AbstractEventLoop]) -> None:
+    loop = loop_obj()
+    try:
+        calls_num = random.randint(1, 20)
+        mock_func = MagicMock()
+        start_time = loop.time()
+        for i in range(calls_num):
+            loop.call_at(start_time + DELAY_TIME * (i + 1), mock_func, i)
+
+        loop.call_at(start_time + DELAY_TIME * (calls_num + 1), loop.stop)
+        loop.run_forever()
+        end_time = loop.time()
+
+        assert mock_func.call_count == calls_num
+        assert DELAY_TIME * (calls_num + 1) <= (end_time - start_time) <= DELAY_TIME * (calls_num + 2)
+
+        expected_calls = [((i,),) for i in range(calls_num)]
+        assert mock_func.call_args_list == expected_calls
+    finally:
+        loop.close()
+
+
+@pytest.mark.parametrize("loop_obj", [Loop, ThreadSafeLoop])
+def test_call_at_with_cancel(loop_obj: Type[asyncio.AbstractEventLoop]) -> None:
+    loop = loop_obj()
+    try:
+        calls_num = random.randint(1, 20)
+        mock_func = MagicMock()
+        start_time = loop.time()
+        for x in range(calls_num):
+            h = loop.call_at(start_time + DELAY_TIME * (x + 1), mock_func, x)
+            if x % 2 == 0:
+                h.cancel()
+
+        loop.call_at(start_time + DELAY_TIME * (calls_num + 1), loop.stop)
+        loop.run_forever()
+        end_time = loop.time()
+
+        assert mock_func.call_count == (calls_num // 2)
+        assert DELAY_TIME * (calls_num + 1) <= (end_time - start_time) <= DELAY_TIME * (calls_num + 2)
+
+        expected_calls = [((i,),) for i in range(calls_num) if i % 2 == 1]
+        assert mock_func.call_args_list == expected_calls
+    finally:
+        loop.close()
+
+
+@pytest.mark.parametrize("loop_obj", [Loop, ThreadSafeLoop])
+def test_call_at_with_context(loop_obj: Type[asyncio.AbstractEventLoop]) -> None:
+    loop = loop_obj()
+    try:
+        calls_num = random.randint(1, 20)
+        mock_func = MagicMock()
+        start_time = loop.time()
+
+        for i in range(calls_num):
+            loop.call_at(start_time + DELAY_TIME * (i + 1), mock_func, i, context=copy_context())
+
+        loop.call_at(start_time + DELAY_TIME * (calls_num + 1), loop.stop)
+        loop.run_forever()
+        end_time = loop.time()
+
+        assert mock_func.call_count == calls_num
+        assert DELAY_TIME * (calls_num + 1) <= (end_time - start_time) <= DELAY_TIME * (calls_num + 2)
+
+        expected_calls = [((i,),) for i in range(calls_num)]
+        assert mock_func.call_args_list == expected_calls
+    finally:
+        loop.close()
