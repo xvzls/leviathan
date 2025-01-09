@@ -92,7 +92,7 @@ inline fn z_loop_call_soon(
     mutex.lock();
     defer mutex.unlock();
 
-    if (loop_data.closed) {
+    if (!loop_data.initialized) {
         utils.put_python_runtime_error_message("Loop is closed\x00");
         return error.PythonError;
     }

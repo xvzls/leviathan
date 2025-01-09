@@ -53,26 +53,23 @@ pub fn loop_is_closed(self: ?*LoopObject, _: ?PyObject) callconv(.C) ?PyObject {
     mutex.lock();
     defer mutex.unlock();
 
-    return python_c.PyBool_FromLong(@intCast(@intFromBool(loop_data.closed)));
+    return python_c.PyBool_FromLong(@intCast(@intFromBool(!loop_data.initialized)));
 }
 
 pub fn loop_close(self: ?*LoopObject, _: ?PyObject) callconv(.C) ?PyObject {
     const loop_data = utils.get_data_ptr(Loop, self.?);
 
-    const mutex = &loop_data.mutex;
-    mutex.lock();
-    defer mutex.unlock();
+    {
+        const mutex = &loop_data.mutex;
+        mutex.lock();
+        defer mutex.unlock();
 
-    if (loop_data.running) {
-        utils.put_python_runtime_error_message("Loop is running\x00");
-        return null;
+        if (loop_data.running) {
+            utils.put_python_runtime_error_message("Loop is running\x00");
+            return null;
+        }
     }
 
-    const allocator = loop_data.allocator;
-    for (&loop_data.ready_tasks_queues) |*ready_tasks_queue| {
-        _  = CallbackManager.execute_callbacks(allocator, ready_tasks_queue, .Stop, false);
-    }
-
-    loop_data.closed = true;
+    loop_data.release();
     return python_c.get_py_none();
 }

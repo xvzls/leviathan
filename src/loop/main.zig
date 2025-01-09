@@ -31,7 +31,6 @@ unix_signals: UnixSignals,
 
 running: bool = false,
 stopping: bool = false,
-closed: bool = false,
 initialized: bool = false,
 
 
@@ -82,10 +81,6 @@ pub fn init(self: *Loop, allocator: std.mem.Allocator, rtq_min_capacity: usize) 
 }
 
 pub fn release(self: *Loop) void {
-    if (!self.closed) {
-        @panic("Loop is not closed, can't be deallocated");
-    }
-
     if (self.running) {
         @panic("Loop is running, can't be deallocated");
     }
@@ -105,6 +100,7 @@ pub fn release(self: *Loop) void {
     }
 
     for (&self.ready_tasks_queues) |*ready_tasks_queue| {
+        _  = CallbackManager.execute_callbacks(allocator, ready_tasks_queue, .Stop, false);
         const queue = &ready_tasks_queue.queue;
         for (0..queue.len) |_| {
              const set: *CallbackManager.CallbacksSet = @alignCast(@ptrCast(queue.pop() catch unreachable));

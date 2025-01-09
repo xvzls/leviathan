@@ -153,7 +153,7 @@ pub fn start(self: *Loop) !void {
     mutex.lock();
     defer mutex.unlock();
 
-    if (self.closed) {
+    if (!self.initialized) {
         utils.put_python_runtime_error_message("Loop is closed\x00");
         return error.PythonError;
     }
