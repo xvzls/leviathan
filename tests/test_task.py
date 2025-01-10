@@ -137,3 +137,24 @@ def test_coro_running(
         assert task.result() == 42
     finally:
         loop.close()
+
+
+@pytest.mark.parametrize("task_obj, loop_obj", [
+    (Task, Loop),
+    (ThreadSafeTask, ThreadSafeLoop)
+])
+def test_current_task(
+    task_obj: Type[asyncio.Task[Any]], loop_obj: Type[asyncio.AbstractEventLoop]
+) -> None:
+    async def test_func(loop: asyncio.AbstractEventLoop) -> asyncio.Task[Any]|None:
+        return asyncio.current_task(loop)
+
+    loop = loop_obj()
+    try:
+        task = task_obj(test_func(loop), loop=loop)
+        loop.call_soon(loop.stop)
+        loop.run_forever()
+
+        assert task.result() == task
+    finally:
+        loop.close()
