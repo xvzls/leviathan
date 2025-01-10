@@ -1,11 +1,14 @@
 from .leviathan_zig_single_thread import Loop as _LoopSingleThread
 from .leviathan_zig import Loop as _Loop
 
-from typing import Any, Callable, TypedDict, NotRequired, AsyncGenerator
+from typing import Any, Callable, TypedDict, NotRequired, AsyncGenerator, Awaitable, TypeVar
 from logging import getLogger
-import asyncio, socket
+
+import asyncio, socket, weakref
 
 logger = getLogger(__package__)
+
+_T = TypeVar("_T")
 
 
 class ExceptionContext(TypedDict):
@@ -17,7 +20,7 @@ class ExceptionContext(TypedDict):
     handle: NotRequired[asyncio.Handle]
     protocol: NotRequired[asyncio.Protocol]
     socket: NotRequired[socket.socket]
-    asyncgenerator: NotRequired[AsyncGenerator[Any]]
+    asyncgen: NotRequired[AsyncGenerator[Any]]
 
 
 class _LoopHelpers:
@@ -55,7 +58,7 @@ class _LoopHelpers:
         if socket is not None:
             context["socket"] = socket
         if asyncgenerator is not None:
-            context["asyncgenerator"] = asyncgenerator
+            context["asyncgen"] = asyncgenerator
 
         self._exception_handler(context)
 
@@ -87,6 +90,52 @@ class _LoopHelpers:
 
     # --------------------------------------------------------------------------------------------------------
 
+    async def _shutdown_asyncgenerators(
+        self, asyncgens: weakref.WeakSet[AsyncGenerator[Any]]
+    ) -> None:
+        closing_agens = list(asyncgens)
+        asyncgens.clear()
+
+        results = await asyncio.gather(
+            *[ag.aclose() for ag in closing_agens], return_exceptions=True
+        )
+
+        for result, agen in zip(results, closing_agens):
+            if isinstance(result, Exception):
+                self.call_exception_handler(
+                    {
+                        "message": f"an error occurred during closing of "
+                        f"asynchronous generator {agen!r}",
+                        "exception": result,
+                        "asyncgen": agen,
+                    }
+                )
+
+    def __run_until_complete_cb(self, future: asyncio.Future[Any]) -> None:
+        loop = future.get_loop()
+        loop.stop()
+
+    def _run_until_complete(self, loop: asyncio.AbstractEventLoop, future: Awaitable[_T]) -> _T:
+        if loop.is_closed() or loop.is_running():
+            raise RuntimeError("Event loop is closed or already running")
+
+        new_task = not asyncio.isfuture(future)
+        new_future = asyncio.ensure_future(future, loop=loop)
+        new_future.add_done_callback(self.__run_until_complete_cb)
+        try:
+            loop.run_forever()
+        except:
+            if new_task and new_future.done() and not new_future.cancelled():
+                new_future.exception()
+            raise
+        finally:
+            new_future.remove_done_callback(self.__run_until_complete_cb)
+
+        if not new_future.done():
+            raise RuntimeError("Event loop stopped before Future completed.")
+
+        return new_future.result()
+
 
 class Loop(_LoopSingleThread, _LoopHelpers):
     def __init__(self, ready_tasks_queue_min_bytes_capacity: int = 10**6) -> None:
@@ -95,6 +144,12 @@ class Loop(_LoopSingleThread, _LoopHelpers):
             self, ready_tasks_queue_min_bytes_capacity, self._call_exception_handler
         )
 
+    async def shutdown_asyncgens(self) -> None:
+        await self._shutdown_asyncgenerators(self._asyncgens)
+
+    def run_until_complete(self, future: Awaitable[_T]) -> _T:
+        return self._run_until_complete(self, future)
+
 
 class ThreadSafeLoop(_Loop, _LoopHelpers):
     def __init__(self, ready_tasks_queue_min_bytes_capacity: int = 10**6) -> None:
@@ -102,3 +157,9 @@ class ThreadSafeLoop(_Loop, _LoopHelpers):
         _Loop.__init__(
             self, ready_tasks_queue_min_bytes_capacity, self._call_exception_handler
         )
+
+    async def shutdown_asyncgens(self) -> None:
+        await self._shutdown_asyncgenerators(self._asyncgens)
+
+    def run_until_complete(self, future: Awaitable[_T]) -> _T:
+        return self._run_until_complete(self, future)

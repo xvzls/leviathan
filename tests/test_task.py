@@ -16,14 +16,16 @@ def test_checking_subclassing_and_arguments(
     another_loop = asyncio.new_event_loop()
     loop = loop_obj()
     try:
-        assert asyncio.isfuture(task_obj(AsyncMock()(), loop=loop))
-
         coro = AsyncMock()()
         with pytest.raises(TypeError):
             task_obj(coro, loop=another_loop)
 
+        assert asyncio.isfuture(task_obj(coro, loop=loop))
         with pytest.raises(TypeError):
             task_obj(None, loop=loop)  # type: ignore
+
+        loop.call_soon(loop.stop)
+        loop.run_forever()
     finally:
         loop.close()
 

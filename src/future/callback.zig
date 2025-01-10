@@ -97,8 +97,8 @@ pub inline fn add_done_callback(
     );
 }
 
-pub fn remove_done_callback(self: *Future, callback_id: u64) !usize {
-    if (self.status != .PENDING) return error.FutureAlreadyFinished;
+pub fn remove_done_callback(self: *Future, callback_id: u64) usize {
+    if (self.status != .PENDING) return 0;
 
     const callbacks_queue = &self.callbacks_queue.queue;
     var node = callbacks_queue.first;
@@ -130,9 +130,9 @@ pub fn remove_done_callback(self: *Future, callback_id: u64) !usize {
 
 pub inline fn call_done_callbacks(self: *Future, new_status: Future.FutureStatus) !void {
     if (self.status != .PENDING) return error.FutureAlreadyFinished;
+    defer self.status = new_status;
 
     if (self.callbacks_queue.last_set == null) {
-        self.status = new_status;
         return;
     }
 
@@ -148,5 +148,4 @@ pub inline fn call_done_callbacks(self: *Future, new_status: Future.FutureStatus
     };
 
     try Loop.Scheduling.Soon.dispatch(self.loop, callback);
-    self.status = new_status;
 }

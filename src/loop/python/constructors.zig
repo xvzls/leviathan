@@ -35,6 +35,10 @@ inline fn z_loop_new(
         orelse return error.PythonError;
     errdefer python_c.py_decref(cancelled_error_exc);
 
+    const set_running_loop: PyObject = python_c.PyObject_GetAttrString(asyncio_module, "_set_running_loop\x00")
+        orelse return error.PythonError;
+    errdefer python_c.py_decref(set_running_loop);
+
     const enter_task_func: PyObject = python_c.PyObject_GetAttrString(asyncio_module, "_enter_task\x00")
         orelse return error.PythonError;
     errdefer python_c.py_decref(enter_task_func);
@@ -87,6 +91,8 @@ inline fn z_loop_new(
     instance.cancelled_error_exc = cancelled_error_exc;
     instance.invalid_state_exc = invalid_state_exc;
 
+    instance.set_running_loop = set_running_loop;
+
     instance.enter_task_func = enter_task_func;
     instance.leave_task_func = leave_task_func;
 
@@ -127,6 +133,8 @@ pub fn loop_clear(self: ?*LoopObject) callconv(.C) c_int {
     python_c.py_decref_and_set_null(&py_loop.invalid_state_exc);
     python_c.py_decref_and_set_null(&py_loop.cancelled_error_exc);
 
+    python_c.py_decref_and_set_null(&py_loop.set_running_loop);
+
     python_c.py_decref_and_set_null(&py_loop.enter_task_func);
     python_c.py_decref_and_set_null(&py_loop.leave_task_func);
 
@@ -153,6 +161,7 @@ pub fn loop_traverse(self: ?*LoopObject, visit: python_c.visitproc, arg: ?*anyop
             instance.asyncio_module,
             instance.invalid_state_exc,
             instance.cancelled_error_exc,
+            instance.set_running_loop,
             instance.enter_task_func,
             instance.leave_task_func,
             instance.exception_handler,

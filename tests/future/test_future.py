@@ -302,11 +302,11 @@ def test_future_await(
         return result
 
     # TODO: Replace asyncio loop by leviathan
-    a_loop = asyncio.new_event_loop()
+    # a_loop = asyncio.new_event_loop()
     loop = loop_obj()
     try:
         future = fut_obj(loop=loop)
-        result = a_loop.run_until_complete(test_func(future))
+        result = loop.run_until_complete(test_func(future))
         assert future.done()
         assert future.result() == 42
         assert result == 42

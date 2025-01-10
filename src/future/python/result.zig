@@ -36,7 +36,7 @@ pub inline fn get_result(self: *PythonFutureObject) ?PyObject {
                 python_c.PyErr_SetRaisedException(new_exc);
                 break :blk null;
             }
-            break :blk @as(PyObject, @alignCast(@ptrCast(future_data.result.?)));
+            break :blk python_c.py_newref(@as(PyObject, @alignCast(@ptrCast(future_data.result.?))));
         },
         .CANCELED => blk: {
             raise_cancel_exception(self);
@@ -93,7 +93,7 @@ pub inline fn future_fast_set_exception(self: *PythonFutureObject, obj: *Future,
     return 0;
 }
 
-inline fn z_future_set_exception(self: *PythonFutureObject, args: ?PyObject) !PyObject {
+inline fn z_future_set_exception(self: *PythonFutureObject, exception: PyObject) !PyObject {
     const future_data = utils.get_data_ptr(Future, self);
     const mutex = &future_data.mutex;
     mutex.lock();
@@ -107,17 +107,12 @@ inline fn z_future_set_exception(self: *PythonFutureObject, args: ?PyObject) !Py
         else => {}
     }
 
-    var exception: ?PyObject = null;
-    if (python_c.PyArg_ParseTuple(args.?, "O:exception\x00", &exception) < 0) {
-        return error.PythonError;
-    }
-
-    _ = try future_fast_set_exception(self, future_data, exception.?);
+    _ = try future_fast_set_exception(self, future_data, exception);
     return python_c.get_py_none();
 }
 
-pub fn future_set_exception(self: ?*PythonFutureObject, args: ?PyObject) callconv(.C) ?PyObject {
-    return utils.execute_zig_function(z_future_set_exception, .{self.?, args});
+pub fn future_set_exception(self: ?*PythonFutureObject, exception: ?PyObject) callconv(.C) ?PyObject {
+    return utils.execute_zig_function(z_future_set_exception, .{self.?, exception.?});
 }
 
 pub inline fn future_fast_set_result(obj: *Future, result: PyObject) !void {
@@ -127,7 +122,7 @@ pub inline fn future_fast_set_result(obj: *Future, result: PyObject) !void {
     try Future.Callback.call_done_callbacks(obj, .FINISHED);
 }
 
-inline fn z_future_set_result(self: *PythonFutureObject, args: ?PyObject) !PyObject {
+inline fn z_future_set_result(self: *PythonFutureObject, result: PyObject) !PyObject {
     const future_data = utils.get_data_ptr(Future, self);
     const mutex = &future_data.mutex;
     mutex.lock();
@@ -141,17 +136,12 @@ inline fn z_future_set_result(self: *PythonFutureObject, args: ?PyObject) !PyObj
         else => {}
     }
 
-    var result: ?PyObject = undefined;
-    if (python_c.PyArg_ParseTuple(args.?, "O:result\x00", &result) < 0) {
-        return error.PythonError;
-    }
-
-    try future_fast_set_result(future_data, result.?);
+    try future_fast_set_result(future_data, result);
     return python_c.get_py_none();
 }
 
-pub fn future_set_result(self: ?*PythonFutureObject, args: ?PyObject) callconv(.C) ?PyObject {
-    return utils.execute_zig_function(z_future_set_result, .{self.?, args});
+pub fn future_set_result(self: ?*PythonFutureObject, result: ?PyObject) callconv(.C) ?PyObject {
+    return utils.execute_zig_function(z_future_set_result, .{self.?, result.?});
 }
 
 pub fn future_done(self: ?*PythonFutureObject, _: ?PyObject) callconv(.C) ?PyObject {

@@ -164,5 +164,6 @@ pub fn future_iternext(self: ?*PythonFutureObject) callconv(.C) ?PyObject {
     }
 
     instance.blocking = 1;
+    python_c.py_incref(@ptrCast(instance));
     return @ptrCast(instance);
 }

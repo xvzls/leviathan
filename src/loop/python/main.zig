@@ -120,6 +120,8 @@ pub const LoopObject = extern struct {
     asyncio_module: ?PyObject,
     invalid_state_exc: ?PyObject,
     cancelled_error_exc: ?PyObject,
+
+    set_running_loop: ?PyObject,
     
     enter_task_func: ?PyObject,
     leave_task_func: ?PyObject,

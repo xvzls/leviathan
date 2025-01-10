@@ -30,7 +30,7 @@ inline fn set_fut_waiter(
     if (task.fut_waiter) |_| {
         @panic("task.fut_waiter is not null");
     }else{
-        task.fut_waiter = future;
+        task.fut_waiter = python_c.py_newref(future);
     }
 }
 
@@ -283,6 +283,8 @@ inline fn failed_execution(
         }else{
             const value: PyObject = python_c.PyObject_GetAttrString(exception, "value\x00")
                 orelse return .Exception;
+            defer python_c.py_decref(value);
+
             return execute_zig_function(
                 Future.Python.Result.future_fast_set_result, .{future_data, value}
             );

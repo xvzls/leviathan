@@ -76,12 +76,7 @@ pub fn future_add_done_callback(self: ?*PythonFutureObject, args: ?PyObject) cal
     return utils.execute_zig_function(z_future_add_done_callback, .{self.?, args.?});
 }
 
-pub fn future_remove_done_callback(self: ?*PythonFutureObject, args: ?PyObject) callconv(.C) ?PyObject {
-    var callback: ?PyObject = null;
-    if (python_c.PyArg_ParseTuple(args.?, "O\x00", &callback) < 0) {
-        return null;
-    }
-
+pub fn future_remove_done_callback(self: ?*PythonFutureObject, callback: ?PyObject) callconv(.C) ?PyObject {
     const future_data = utils.get_data_ptr(Future, self.?);
     const mutex = &future_data.mutex;
     mutex.lock();
@@ -89,13 +84,7 @@ pub fn future_remove_done_callback(self: ?*PythonFutureObject, args: ?PyObject) 
 
     const removed_count = Future.Callback.remove_done_callback(
         future_data, @intCast(@intFromPtr(callback.?))
-    ) catch |err| {
-        const err_trace = @errorReturnTrace();
-        utils.print_error_traces(err_trace, err);
-        utils.put_python_runtime_error_message(@errorName(err));
-
-        return null;
-    };
+    );
 
     return python_c.PyLong_FromUnsignedLongLong(@intCast(removed_count));
 }

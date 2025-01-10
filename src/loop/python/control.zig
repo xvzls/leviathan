@@ -10,16 +10,26 @@ const CallbackManager = @import("../../callback_manager.zig");
 
 const std = @import("std");
 
-// pub fn loop_run_until_complete(self: ?*LoopObject, _: ?PyObject) callconv(.C) ?PyObject {
-    
-// }
-//
-
-fn z_loop_run_forever(self: *LoopObject) !PyObject {
+inline fn z_loop_run_forever(self: *LoopObject) !PyObject {
     const loop_data = utils.get_data_ptr(Loop, self);
 
     try Loop.Python.Hooks.setup_asyncgen_hooks(self);
     defer Loop.Python.Hooks.cleanup_asyncgen_hooks(self);
+
+    const set_running_loop = self.set_running_loop.?;
+    if (python_c.PyObject_CallOneArg(set_running_loop, @ptrCast(self))) |v| {
+        python_c.py_decref(v);
+    }else{
+        return error.PythonError;
+    }
+
+    defer {
+        const exc = python_c.PyErr_GetRaisedException();
+        if (python_c.PyObject_CallOneArg(set_running_loop, @ptrCast(self))) |v| {
+            python_c.py_decref(v);
+            python_c.PyErr_SetRaisedException(exc);
+        }
+    }
 
     try Loop.Runner.start(loop_data);
     return python_c.get_py_none();

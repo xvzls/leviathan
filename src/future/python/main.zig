@@ -20,7 +20,7 @@ const PythonFutureMethods: []const python_c.PyMethodDef = &[_]python_c.PyMethodD
         .ml_name = "set_result\x00",
         .ml_meth = @ptrCast(&Result.future_set_result),
         .ml_doc = "Mark the Future as done and set its result.\x00",
-        .ml_flags = python_c.METH_VARARGS
+        .ml_flags = python_c.METH_O
     },
     python_c.PyMethodDef{
         .ml_name = "exception\x00",
@@ -32,7 +32,7 @@ const PythonFutureMethods: []const python_c.PyMethodDef = &[_]python_c.PyMethodD
         .ml_name = "set_exception\x00",
         .ml_meth = @ptrCast(&Result.future_set_exception),
         .ml_doc = "Mark the Future as done and set its exception.\x00",
-        .ml_flags = python_c.METH_VARARGS
+        .ml_flags = python_c.METH_O
     },
     python_c.PyMethodDef{
         .ml_name = "cancel\x00",
@@ -56,13 +56,13 @@ const PythonFutureMethods: []const python_c.PyMethodDef = &[_]python_c.PyMethodD
         .ml_name = "add_done_callback\x00",
         .ml_meth = @ptrCast(&Callbacks.future_add_done_callback),
         .ml_doc = "Add a callback to be run when the Future is done.\x00",
-        .ml_flags = python_c.METH_VARARGS
+        .ml_flags = python_c.METH_VARARGS // TODO: Add fast call
     },
     python_c.PyMethodDef{
         .ml_name = "remove_done_callback\x00",
         .ml_meth = @ptrCast(&Callbacks.future_remove_done_callback),
         .ml_doc = "Remove callback from the callbacks list.\x00",
-        .ml_flags = python_c.METH_VARARGS
+        .ml_flags = python_c.METH_O
     },
     python_c.PyMethodDef{
         .ml_name = "get_loop\x00",
