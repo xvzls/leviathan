@@ -178,9 +178,9 @@ inline fn handle_legacy_future_object(
 
 inline fn handle_leviathan_future_object(
     task: *Task.PythonTaskObject,
-    future: *Future.Python.FutureObject
+    future: *Future.Python.FutureObject,
+    loop_data: *Loop
 ) CallbackManager.ExecuteCallbacksReturn {
-    const loop_data = utils.get_data_ptr(Loop, task.fut.py_loop.?);
     const allocator = loop_data.allocator;
 
     const future_data = utils.get_data_ptr(Future, future);
@@ -241,13 +241,11 @@ inline fn handle_leviathan_future_object(
 }
 
 inline fn successfully_execution(
-    task: *Task.PythonTaskObject, result: PyObject
+    task: *Task.PythonTaskObject, loop_data: *Loop, result: PyObject
 ) CallbackManager.ExecuteCallbacksReturn {
     if (python_c.PyObject_TypeCheck(result, &Future.Python.FutureType) != 0) {
-        return handle_leviathan_future_object(task, @ptrCast(result));
+        return handle_leviathan_future_object(task, @ptrCast(result), loop_data);
     }else if (python_c.Py_IsNone(result) != 0) {
-        const loop_data = utils.get_data_ptr(Loop, task.fut.py_loop.?);
-
         const callback: CallbackManager.Callback = .{
             .PythonTask = .{
                 .task = task
@@ -266,7 +264,10 @@ inline fn successfully_execution(
     return handle_legacy_future_object(task, result);
 }
 
-inline fn failed_execution(task: *Task.PythonTaskObject) CallbackManager.ExecuteCallbacksReturn {
+inline fn failed_execution(
+    task: *Task.PythonTaskObject,
+    py_loop: *Loop.Python.LoopObject
+) CallbackManager.ExecuteCallbacksReturn {
     const exc_match = python_c.PyErr_GivenExceptionMatches;
 
     const fut: *Future.Python.FutureObject = &task.fut;
@@ -290,7 +291,6 @@ inline fn failed_execution(task: *Task.PythonTaskObject) CallbackManager.Execute
         return .Continue;
     }
 
-    const py_loop = task.fut.py_loop.?;
     const cancelled_error = py_loop.cancelled_error_exc.?;
     if (exc_match(exception, cancelled_error) > 0) {
         if (!Future.Python.Cancel.future_fast_cancel(fut, null)) {
@@ -329,7 +329,12 @@ pub fn step_run_and_handle_result(
     var exception_value: ?PyObject = exc_value;
     defer release_python_task_callback(task, exception_value);
 
-    const future_data = utils.get_data_ptr(Future, &task.fut);
+    const py_fut = &task.fut;
+    const py_loop = py_fut.py_loop.?;
+
+    const loop_data = utils.get_data_ptr(Loop, py_loop);
+    const future_data = utils.get_data_ptr(Future, py_fut);
+
     const mutex = &future_data.mutex;
     mutex.lock();
     defer mutex.unlock();
@@ -338,7 +343,7 @@ pub fn step_run_and_handle_result(
         utils.put_python_runtime_error_message(
             "Task already finished\x00"
         );
-        return failed_execution(task);
+        return failed_execution(task, py_loop);
     }
 
     if (task.must_cancel) {
@@ -362,6 +367,9 @@ pub fn step_run_and_handle_result(
 
     const run_context = task.run_context.?;
     var args: [2]?PyObject = undefined;
+    const enter_task_args: [2]?PyObject = .{
+        @ptrCast(py_loop), @ptrCast(task)
+    };
 
     const py_none = python_c.get_py_none();
     defer python_c.py_decref(py_none);
@@ -374,17 +382,27 @@ pub fn step_run_and_handle_result(
         args[1] = py_none;
     }
 
-    // TODO: Add enter_task and leave_task execution
-    mutex.unlock();
-    const ret: ?PyObject = python_c.PyObject_Vectorcall(run_context, &args, args.len, null);
-    mutex.lock();
+    var ret: PyObject = python_c.PyObject_Vectorcall(py_loop.enter_task_func.?, &enter_task_args, enter_task_args.len, null)
+        orelse return .Exception;
+    python_c.py_decref(ret);
 
-    if (ret) |result| {
-        defer python_c.py_decref(result);
-        return successfully_execution(task, result);
-    }
+    const new_status = blk: {
+        mutex.unlock();
+        defer mutex.lock();
 
-    return failed_execution(task);
+        const coro_ret: ?PyObject = python_c.PyObject_Vectorcall(run_context, &args, args.len, null);
+        if (coro_ret) |result| {
+            defer python_c.py_decref(result);
+            break :blk successfully_execution(task, loop_data, result);
+        }
+        break :blk failed_execution(task, py_loop);
+    };
+
+    ret = python_c.PyObject_Vectorcall(py_loop.leave_task_func.?, &enter_task_args, enter_task_args.len, null)
+        orelse return .Exception;
+    python_c.py_decref(ret);
+
+    return new_status;
 }
 
 fn wakeup_task(
