@@ -13,17 +13,20 @@ const std = @import("std");
 // pub fn loop_run_until_complete(self: ?*LoopObject, _: ?PyObject) callconv(.C) ?PyObject {
     
 // }
+//
+
+fn z_loop_run_forever(self: *LoopObject) !PyObject {
+    const loop_data = utils.get_data_ptr(Loop, self);
+
+    try Loop.Python.Hooks.setup_asyncgen_hooks(self);
+    defer Loop.Python.Hooks.cleanup_asyncgen_hooks(self);
+
+    try Loop.Runner.start(loop_data);
+    return python_c.get_py_none();
+}
 
 pub fn loop_run_forever(self: ?*LoopObject, _: ?PyObject) callconv(.C) ?PyObject {
-    const loop_data = utils.get_data_ptr(Loop, self.?);
-    Loop.Runner.start(loop_data) catch |err| {
-        if (err != error.PythonError) {
-            utils.put_python_runtime_error_message(@errorName(err));
-        }
-        return null;
-    };
-
-    return python_c.get_py_none();
+    return utils.execute_zig_function(z_loop_run_forever, .{self.?});
 }
 
 pub fn loop_stop(self: ?*LoopObject, _: ?PyObject) callconv(.C) ?PyObject {

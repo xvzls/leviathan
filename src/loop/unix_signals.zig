@@ -83,7 +83,7 @@ fn default_sigint_signal_callback(
     return .Exception;
 }
 
-pub inline fn link(self: *UnixSignals, sig: u6, callback: CallbackManager.Callback) !void {
+pub fn link(self: *UnixSignals, sig: u6, callback: CallbackManager.Callback) !void {
     try self.callbacks.put(sig, callback);
     self.callbacks.rehash();
 
@@ -159,11 +159,13 @@ pub fn init(loop: *Loop) !void {
 pub fn deinit(self: *UnixSignals) void {
     std.posix.close(self.fd);
     var iter = self.callbacks.keyIterator();
+    var mask: std.posix.sigset_t = std.posix.empty_sigset;
     while (iter.next()) |sig| {
+        sigaddset(&mask, sig.*);
         const removed = self.callbacks.remove(sig.*);
         if (!removed) @panic("Error removing signal");
     }
-
+    std.posix.sigprocmask(std.os.linux.SIG.UNBLOCK, &mask, null);
     self.callbacks.deinit();
 }
 

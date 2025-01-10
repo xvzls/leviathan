@@ -1,3 +1,5 @@
+const std = @import("std");
+
 const Loop = @import("../main.zig");
 
 const python_c = @import("python_c");
@@ -7,6 +9,7 @@ const Constructors = @import("constructors.zig");
 const Scheduling = @import("scheduling.zig");
 const Control = @import("control.zig");
 const Utils = @import("utils/main.zig");
+pub const Hooks = @import("hooks.zig");
 
 const PythonLoopMethods: []const python_c.PyMethodDef = &[_]python_c.PyMethodDef{
     // --------------------- Control ---------------------
@@ -93,9 +96,28 @@ const PythonLoopMethods: []const python_c.PyMethodDef = &[_]python_c.PyMethodDef
     }
 };
 
+
+const LoopMembers: []const python_c.PyMemberDef = &[_]python_c.PyMemberDef{
+    python_c.PyMemberDef{ // Just for be supported by asyncio.isfuture
+        .name = "_asyncgens\x00",
+        .type = python_c.Py_T_OBJECT_EX,
+        .offset = @offsetOf(LoopObject, "asyncgens_set"),
+        .doc = null,
+    },
+    python_c.PyMemberDef{
+        .name = null, .flags = 0, .offset = 0, .doc = null
+    }
+};
+
 pub const LoopObject = extern struct {
     ob_base: python_c.PyObject,
     data: [@sizeOf(Loop)]u8,
+
+    thread_id: std.Thread.Id,
+
+    sys_module: ?PyObject,
+    get_asyncgen_hooks: ?PyObject,
+    set_asyncgen_hooks: ?PyObject,
 
     asyncio_module: ?PyObject,
     invalid_state_exc: ?PyObject,
@@ -107,6 +129,12 @@ pub const LoopObject = extern struct {
     contextvars_module: ?PyObject,
     contextvars_copy: ?PyObject,
     exception_handler: ?PyObject,
+
+    asyncgens_set: ?PyObject,
+    asyncgens_set_add: ?PyObject,
+    asyncgens_set_discard: ?PyObject,
+
+    old_asyncgen_hooks: ?PyObject,
 
     task_name_counter: u64,
 };

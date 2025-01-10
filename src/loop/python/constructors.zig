@@ -41,7 +41,43 @@ inline fn z_loop_new(
         orelse return error.PythonError;
     errdefer python_c.py_decref(leave_task_func);
 
+    const sys_module: PyObject = python_c.PyImport_ImportModule("sys\x00")
+        orelse return error.PythonError;
+    errdefer python_c.py_decref(sys_module);
+
+    const get_asyncgen_hooks: PyObject = python_c.PyObject_GetAttrString(sys_module, "get_asyncgen_hooks\x00")
+        orelse return error.PythonError;
+    errdefer python_c.py_decref(get_asyncgen_hooks);
+
+    const set_asyncgen_hooks: PyObject = python_c.PyObject_GetAttrString(sys_module, "set_asyncgen_hooks\x00")
+        orelse return error.PythonError;
+    errdefer python_c.py_decref(set_asyncgen_hooks);
+
+    const weakref_module: PyObject = python_c.PyImport_ImportModule("weakref\x00")
+        orelse return error.PythonError;
+    defer python_c.py_decref(weakref_module);
+
+    const weakref_set_class: PyObject = python_c.PyObject_GetAttrString(weakref_module, "WeakSet\x00")
+        orelse return error.PythonError;
+    errdefer python_c.py_decref(weakref_set_class);
+
+    const weakref_set: PyObject = python_c.PyObject_CallNoArgs(weakref_set_class)
+        orelse return error.PythonError;
+    errdefer python_c.py_decref(weakref_set);
+
+    const weakref_add: PyObject = python_c.PyObject_GetAttrString(weakref_set, "add\x00")
+        orelse return error.PythonError;
+    errdefer python_c.py_decref(weakref_add);
+
+    const weakref_discard: PyObject = python_c.PyObject_GetAttrString(weakref_set, "discard\x00")
+        orelse return error.PythonError;
+    errdefer python_c.py_decref(weakref_discard);
+
     @memset(&instance.data, 0);
+
+    instance.sys_module = sys_module;
+    instance.get_asyncgen_hooks = get_asyncgen_hooks;
+    instance.set_asyncgen_hooks = set_asyncgen_hooks;
 
     instance.asyncio_module = asyncio_module;
     instance.cancelled_error_exc = cancelled_error_exc;
@@ -52,6 +88,12 @@ inline fn z_loop_new(
 
     instance.contextvars_module = contextvars_module;
     instance.contextvars_copy = contextvars_copy;
+
+    instance.asyncgens_set = weakref_set;
+    instance.asyncgens_set_add = weakref_add;
+    instance.asyncgens_set_discard = weakref_discard;
+
+    instance.old_asyncgen_hooks = null;
 
     return instance;
 }
@@ -73,13 +115,26 @@ pub fn loop_clear(self: ?*LoopObject) callconv(.C) c_int {
         loop_data.release();
     }
 
+    python_c.py_decref_and_set_null(&py_loop.sys_module);
+    python_c.py_decref_and_set_null(&py_loop.get_asyncgen_hooks);
+    python_c.py_decref_and_set_null(&py_loop.set_asyncgen_hooks);
+
     python_c.py_decref_and_set_null(&py_loop.asyncio_module);
     python_c.py_decref_and_set_null(&py_loop.invalid_state_exc);
     python_c.py_decref_and_set_null(&py_loop.cancelled_error_exc);
 
+    python_c.py_decref_and_set_null(&py_loop.enter_task_func);
+    python_c.py_decref_and_set_null(&py_loop.leave_task_func);
+
     python_c.py_decref_and_set_null(&py_loop.exception_handler);
     python_c.py_decref_and_set_null(&py_loop.contextvars_module);
     python_c.py_decref_and_set_null(&py_loop.contextvars_copy);
+
+    python_c.py_decref_and_set_null(&py_loop.asyncgens_set);
+    python_c.py_decref_and_set_null(&py_loop.asyncgens_set_add);
+    python_c.py_decref_and_set_null(&py_loop.asyncgens_set_discard);
+
+    python_c.py_decref_and_set_null(&py_loop.old_asyncgen_hooks);
 
     return 0;
 }
@@ -88,12 +143,21 @@ pub fn loop_traverse(self: ?*LoopObject, visit: python_c.visitproc, arg: ?*anyop
     const instance = self.?;
     return python_c.py_visit(
         &[_]?*python_c.PyObject{
+            instance.sys_module,
+            instance.get_asyncgen_hooks,
+            instance.set_asyncgen_hooks,
             instance.asyncio_module,
             instance.invalid_state_exc,
             instance.cancelled_error_exc,
+            instance.enter_task_func,
+            instance.leave_task_func,
             instance.exception_handler,
             instance.contextvars_module,
             instance.contextvars_copy,
+            instance.asyncgens_set,
+            instance.asyncgens_set_add,
+            instance.asyncgens_set_discard,
+            instance.old_asyncgen_hooks
         }, visit, arg
     );
 }

@@ -1,7 +1,7 @@
-from typing import TypeVar, TypeVarTuple, Callable, Self, Optional, Unpack, Coroutine, Any, TextIO
+from typing import TypeVar, TypeVarTuple, Callable, Self, Optional, Unpack, Coroutine, Any, TextIO, AsyncGenerator
 from types import FrameType
 from contextvars import Context
-import asyncio
+import asyncio, weakref
 
 _T = TypeVar('_T')
 
@@ -38,6 +38,8 @@ _Tcs = TypeVarTuple("_Tcs")
 
 
 class Loop(asyncio.AbstractEventLoop):
+    _asyncgens: weakref.WeakSet[AsyncGenerator[Any]]
+
     def __init__(self, ready_tasks_queue_min_bytes_capacity: int,
               exception_handler: Callable[[Exception], None]) -> None: ...
 
