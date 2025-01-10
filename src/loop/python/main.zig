@@ -113,8 +113,6 @@ pub const LoopObject = extern struct {
     ob_base: python_c.PyObject,
     data: [@sizeOf(Loop)]u8,
 
-    thread_id: std.Thread.Id,
-
     sys_module: ?PyObject,
     get_asyncgen_hooks: ?PyObject,
     set_asyncgen_hooks: ?PyObject,
@@ -137,6 +135,7 @@ pub const LoopObject = extern struct {
     old_asyncgen_hooks: ?PyObject,
 
     task_name_counter: u64,
+    thread_id: std.Thread.Id,
 };
 
 pub var LoopType = python_c.PyTypeObject{

@@ -6,6 +6,8 @@ const utils = @import("../../utils/utils.zig");
 const Loop = @import("../main.zig");
 const LoopObject = Loop.Python.LoopObject;
 
+const std = @import("std");
+
 inline fn z_loop_new(
     @"type": *python_c.PyTypeObject, _: ?PyObject,
     _: ?PyObject
@@ -74,6 +76,8 @@ inline fn z_loop_new(
     errdefer python_c.py_decref(weakref_discard);
 
     @memset(&instance.data, 0);
+
+    instance.thread_id = std.Thread.getCurrentId();
 
     instance.sys_module = sys_module;
     instance.get_asyncgen_hooks = get_asyncgen_hooks;

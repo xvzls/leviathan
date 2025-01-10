@@ -309,9 +309,35 @@ inline fn failed_execution(
         python_c.PyErr_SetRaisedException(exception);
         return .Exception;
     }
-    
+
+    const exc_message: PyObject = python_c.PyUnicode_FromString("Exception ocurred executing Task\x00")
+        orelse return .Exception;
+    defer python_c.py_decref(exc_message);
+
+    var args: [4]?PyObject = undefined;
+    args[0] = exception;
+    args[1] = exc_message;
+    args[2] = task.coro.?;
+    args[3] = @ptrCast(task);
+
+    const message_kname: PyObject = python_c.PyUnicode_FromString("message\x00")
+        orelse return .Exception;
+    defer python_c.py_decref(message_kname);
+
+    const callback_kname: PyObject = python_c.PyUnicode_FromString("callback\x00")
+        orelse return .Exception;
+    defer python_c.py_decref(callback_kname);
+
+    const task_kname: PyObject = python_c.PyUnicode_FromString("task\x00")
+        orelse return .Exception;
+    defer python_c.py_decref(task_kname);
+
+    const knames: PyObject = python_c.PyTuple_Pack(3, message_kname, callback_kname, task_kname)
+        orelse return .Exception;
+    defer python_c.py_decref(knames);
+
     const exception_handler = py_loop.exception_handler.?;
-    const exc_handler_ret: PyObject = python_c.PyObject_CallOneArg(exception_handler, exception)
+    const exc_handler_ret: PyObject = python_c.PyObject_Vectorcall(exception_handler, &args, 1, knames)
         orelse return .Exception;
     python_c.py_decref(exc_handler_ret);
 

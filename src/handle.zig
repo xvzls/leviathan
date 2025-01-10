@@ -61,7 +61,33 @@ pub fn callback_for_python_generic_callbacks(
             orelse return .Exception;
         defer python_c.py_decref(exception);
 
-        const exc_handler_ret: PyObject = python_c.PyObject_CallOneArg(data.exception_handler, exception)
+        const exc_message: PyObject = python_c.PyUnicode_FromString("Exception ocurred executing callback\x00")
+            orelse return .Exception;
+        defer python_c.py_decref(exc_message);
+
+        var args: [4]?PyObject = undefined;
+        args[0] = exception;
+        args[1] = exc_message;
+        args[2] = data.args[0];
+        args[3] = @ptrCast(data.py_handle);
+
+        const message_kname: PyObject = python_c.PyUnicode_FromString("message\x00")
+            orelse return .Exception;
+        defer python_c.py_decref(message_kname);
+
+        const callback_kname: PyObject = python_c.PyUnicode_FromString("callback\x00")
+            orelse return .Exception;
+        defer python_c.py_decref(callback_kname);
+
+        const handle_kname: PyObject = python_c.PyUnicode_FromString("handle\x00")
+            orelse return .Exception;
+        defer python_c.py_decref(handle_kname);
+
+        const knames: PyObject = python_c.PyTuple_Pack(3, message_kname, callback_kname, handle_kname)
+            orelse return .Exception;
+        defer python_c.py_decref(knames);
+
+        const exc_handler_ret: PyObject = python_c.PyObject_Vectorcall(data.exception_handler, &args, 1, knames)
             orelse return .Exception;
         python_c.py_decref(exc_handler_ret);
     }
