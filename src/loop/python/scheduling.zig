@@ -13,36 +13,6 @@ const LoopObject = Loop.Python.LoopObject;
 const std = @import("std");
 const builtin = @import("builtin");
 
-inline fn get_py_context(knames: ?PyObject, args_ptr: [*]?PyObject, loop: *LoopObject) !PyObject {
-    var context: ?PyObject = null;
-    if (knames) |kwargs| {
-        const kwargs_len = python_c.PyTuple_Size(kwargs);
-        const args = args_ptr[0..@as(usize, @intCast(kwargs_len))];
-        if (kwargs_len < 0) {
-            return error.PythonError;
-        }else if (kwargs_len == 1) {
-            const key = python_c.PyTuple_GetItem(kwargs, @intCast(0)) orelse return error.PythonError;
-            if (python_c.PyUnicode_CompareWithASCIIString(key, "context\x00") == 0) {
-                context = args[0].?;
-            }else{
-                utils.put_python_runtime_error_message("Invalid keyword argument\x00");
-                return error.PythonError;
-            }
-        }else if (kwargs_len > 1) {
-            utils.put_python_runtime_error_message("Too many keyword arguments\x00");
-            return error.PythonError;
-        }
-    }
-
-    if (context) |v| {
-        if (python_c.Py_IsNone(v) == 0) {
-            return python_c.py_newref(v);
-        }
-    }
-
-    return python_c.PyObject_CallNoArgs(loop.contextvars_copy.?) orelse error.PythonError;
-}
-
 inline fn get_callback_info(allocator: std.mem.Allocator, args: []?PyObject) ![]PyObject {
     const callback_info = try allocator.alloc(PyObject, args.len);
     errdefer allocator.free(callback_info);
@@ -68,8 +38,30 @@ inline fn z_loop_call_soon(
     self: *LoopObject, args: []?PyObject,
     knames: ?PyObject
 ) !*Handle.PythonHandleObject {
-    const context = try get_py_context(knames, args.ptr + args.len, self);
-    errdefer python_c.py_decref(context);
+    if (args.len == 0) {
+        utils.put_python_runtime_error_message("Invalid number of arguments\x00");
+        return error.PythonError;
+    }
+
+    var context: ?PyObject = null;
+    try python_c.parse_vector_call_kwargs(
+        knames, args.ptr + args.len,
+        &.{"context\x00"},
+        &.{&context},
+    );
+
+    if (context) |py_ctx| {
+        if (python_c.Py_IsNone(py_ctx) != 0) {
+            context = python_c.PyObject_CallNoArgs(self.contextvars_copy.?)
+                orelse return error.PythonError;
+            python_c.py_decref(py_ctx);
+        }else{
+            python_c.py_incref(py_ctx);
+        }
+    }else {
+        context = python_c.PyObject_CallNoArgs(self.contextvars_copy.?) orelse return error.PythonError;
+    }
+    errdefer python_c.py_decref(context.?);
 
     const loop_data = utils.get_data_ptr(Loop, self);
     const allocator = loop_data.allocator;
@@ -82,11 +74,11 @@ inline fn z_loop_call_soon(
         allocator.free(callback_info);
     }
 
-    const contextvars_run_func: PyObject = python_c.PyObject_GetAttrString(context, "run\x00")
+    const contextvars_run_func: PyObject = python_c.PyObject_GetAttrString(context.?, "run\x00")
         orelse return error.PythonError;
     errdefer python_c.py_decref(contextvars_run_func);
 
-    const py_handle: *Handle.PythonHandleObject = try Handle.fast_new_handle(context);
+    const py_handle: *Handle.PythonHandleObject = try Handle.fast_new_handle(context.?);
     errdefer python_c.py_decref(@ptrCast(py_handle));
 
     const mutex = &loop_data.mutex;
@@ -141,8 +133,22 @@ inline fn z_loop_delayed_call(
     self: *LoopObject, args: []?PyObject,
     knames: ?PyObject, comptime is_absolute: bool
 ) !*TimerHandle.PythonTimerHandleObject {
-    const context = try get_py_context(knames, args.ptr + args.len, self);
-    errdefer python_c.py_decref(context);
+    if (args.len <= 1) {
+        utils.put_python_runtime_error_message("Invalid number of arguments\x00");
+        return error.PythonError;
+    }
+
+    var context: ?PyObject = null;
+    try python_c.parse_vector_call_kwargs(
+        knames, args.ptr + args.len,
+        &.{"context\x00"},
+        &.{&context},
+    );
+
+    if (context == null) {
+        context = python_c.PyObject_CallNoArgs(self.contextvars_copy.?) orelse return error.PythonError;
+    }
+    errdefer python_c.py_decref(context.?);
 
     const loop_data = utils.get_data_ptr(Loop, self);
     const allocator = loop_data.allocator;
@@ -176,11 +182,11 @@ inline fn z_loop_delayed_call(
         }
     };
 
-    const contextvars_run_func: PyObject = python_c.PyObject_GetAttrString(context, "run\x00")
+    const contextvars_run_func: PyObject = python_c.PyObject_GetAttrString(context.?, "run\x00")
         orelse return error.PythonError;
     errdefer python_c.py_decref(contextvars_run_func);
 
-    const py_timer_handle: *TimerHandle.PythonTimerHandleObject = try TimerHandle.fast_new_timer_handle(time, context);
+    const py_timer_handle: *TimerHandle.PythonTimerHandleObject = try TimerHandle.fast_new_timer_handle(time, context.?);
     errdefer python_c.py_decref(@ptrCast(py_timer_handle));
 
     const mutex = &loop_data.mutex;

@@ -84,4 +84,51 @@ pub inline fn py_visit(objects: []const ?*Python.PyObject, visit: Python.visitpr
     return 0;
 }
 
+pub inline fn parse_vector_call_kwargs(
+    knames: ?*Python.PyObject, args_ptr: [*]?*Python.PyObject,
+    comptime names: []const []const u8,
+    py_objects: []const *?*Python.PyObject
+) !void {
+    const len = names.len;
+    if (len != py_objects.len) {
+        return error.InvalidLength;
+    }
+
+    var _py_objects: [len]?*Python.PyObject = .{null} ** len;
+
+    if (knames) |kwargs| {
+        const kwargs_len = Python.PyTuple_Size(kwargs);
+        const args = args_ptr[0..@as(usize, @intCast(kwargs_len))];
+        if (kwargs_len < 0) {
+            return error.PythonError;
+        }else if (kwargs_len <= len) {
+            loop: for (args, 0..) |arg, i| {
+                const key = Python.PyTuple_GetItem(kwargs, @intCast(i)) orelse return error.PythonError;
+                inline for (names, &_py_objects) |name, *obj| {
+                    if (Python.PyUnicode_CompareWithASCIIString(key, @ptrCast(name)) == 0) {
+                        obj.* = arg.?;
+                        continue :loop;
+                    }
+                }
+
+                Python.PyErr_SetString(
+                    Python.PyExc_RuntimeError, "Invalid keyword argument\x00"
+                );
+                return error.PythonError;
+            }
+        }else if (kwargs_len > len) {
+            Python.PyErr_SetString(
+                Python.PyExc_RuntimeError, "Too many keyword arguments\x00"
+            );
+            return error.PythonError;
+        }
+    }
+
+    for (py_objects, &_py_objects) |py_obj, py_obj2| {
+        if (py_obj2) |v| {
+            py_obj.* = py_newref(v);
+        }
+    }
+}
+
 const Python = @This();

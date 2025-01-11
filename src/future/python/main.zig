@@ -38,7 +38,7 @@ const PythonFutureMethods: []const python_c.PyMethodDef = &[_]python_c.PyMethodD
         .ml_name = "cancel\x00",
         .ml_meth = @ptrCast(&Cancel.future_cancel),
         .ml_doc = "Cancel the Future and schedule callbacks.\x00",
-        .ml_flags = python_c.METH_VARARGS | python_c.METH_KEYWORDS
+        .ml_flags = python_c.METH_FASTCALL | python_c.METH_KEYWORDS
     },
     python_c.PyMethodDef{
         .ml_name = "cancelled\x00",
@@ -56,7 +56,7 @@ const PythonFutureMethods: []const python_c.PyMethodDef = &[_]python_c.PyMethodD
         .ml_name = "add_done_callback\x00",
         .ml_meth = @ptrCast(&Callbacks.future_add_done_callback),
         .ml_doc = "Add a callback to be run when the Future is done.\x00",
-        .ml_flags = python_c.METH_VARARGS // TODO: Add fast call
+        .ml_flags = python_c.METH_FASTCALL | python_c.METH_KEYWORDS
     },
     python_c.PyMethodDef{
         .ml_name = "remove_done_callback\x00",

@@ -11,13 +11,21 @@ const CallbackManager = @import("../../callback_manager.zig");
 
 const utils = @import("../../utils/utils.zig");
 
-inline fn z_future_add_done_callback(self: *PythonFutureObject, args: PyObject) !PyObject {
-    var callback: ?PyObject = null;
-    var context: ?PyObject = null;
-
-    if (python_c.PyArg_ParseTuple(args, "O|O:context\x00", &callback, &context) < 0) {
+inline fn z_future_add_done_callback(
+    self: *PythonFutureObject, args: []?PyObject,
+    knames: ?PyObject
+) !PyObject {
+    if (args.len != 1) {
+        utils.put_python_runtime_error_message("Invalid number of arguments\x00");
         return error.PythonError;
     }
+
+    var context: ?PyObject = null;
+    try python_c.parse_vector_call_kwargs(
+        knames, args.ptr + args.len,
+        &.{"context\x00"},
+        &.{&context},
+    );
 
     const py_loop = self.py_loop.?;
     if (context) |py_ctx| {
@@ -45,8 +53,14 @@ inline fn z_future_add_done_callback(self: *PythonFutureObject, args: PyObject) 
     const callback_args = try allocator.alloc(PyObject, 2);
     errdefer allocator.free(callback_args);
 
-    callback_args[0] = python_c.py_newref(callback.?);
-    errdefer python_c.py_decref(callback_args[0]);
+    const callback = args[0].?;
+    if (python_c.PyCallable_Check(callback) < 0) {
+        utils.put_python_runtime_error_message("Invalid callback\x00");
+        return error.PythonError;
+    }
+
+    callback_args[0] = python_c.py_newref(callback);
+    errdefer python_c.py_decref(callback);
 
     callback_args[1] = @ptrCast(self);
 
@@ -72,8 +86,12 @@ inline fn z_future_add_done_callback(self: *PythonFutureObject, args: PyObject) 
     return python_c.get_py_none();
 }
 
-pub fn future_add_done_callback(self: ?*PythonFutureObject, args: ?PyObject) callconv(.C) ?PyObject {
-    return utils.execute_zig_function(z_future_add_done_callback, .{self.?, args.?});
+pub fn future_add_done_callback(
+    self: ?*PythonFutureObject, args: ?[*]?PyObject, nargs: isize, knames: ?PyObject
+) callconv(.C) ?PyObject {
+    return utils.execute_zig_function(z_future_add_done_callback, .{
+        self.?, args.?[0..@as(usize, @intCast(nargs))], knames
+    });
 }
 
 pub fn future_remove_done_callback(self: ?*PythonFutureObject, callback: ?PyObject) callconv(.C) ?PyObject {

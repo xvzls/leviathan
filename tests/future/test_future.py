@@ -301,8 +301,6 @@ def test_future_await(
         result = await fut
         return result
 
-    # TODO: Replace asyncio loop by leviathan
-    # a_loop = asyncio.new_event_loop()
     loop = loop_obj()
     try:
         future = fut_obj(loop=loop)
