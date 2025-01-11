@@ -71,6 +71,30 @@ pub fn release_set(allocator: std.mem.Allocator, set: *CallbacksSet) void {
     allocator.destroy(set);
 }
 
+pub inline fn cancel_callback(callback: *Callback, can_release: bool) void {
+    const type_info = @typeInfo(CallbackType);
+    const tag = @intFromEnum(callback.*);
+    inline for (type_info.@"enum".fields) |field| {
+        if (field.value == tag) {
+            const data = &@field(callback, field.name);
+            const data_type = @TypeOf(data.*);
+            if (@hasField(data_type, "can_execute")) { // Any other event
+                data.can_execute = false;
+            }else if (@hasField(data_type, "cancelled")) { // Handle
+                if (builtin.single_threaded) {
+                    data.cancelled.* = true;
+                }else{
+                    @atomicStore(bool, data.cancelled, true, .monotonic);
+                }
+            }
+
+            if (@hasField(data_type, "can_release")) {
+                data.can_release = can_release;
+            }
+        }
+    }
+}
+
 pub inline fn append_new_callback(
     allocator: std.mem.Allocator, sets_queue: *CallbacksSetsQueue, callback: Callback,
     max_callbacks: usize

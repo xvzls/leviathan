@@ -19,9 +19,12 @@ pub const GenericCallbackData = struct {
     py_callback: PyObject,
     py_handle: *PythonHandleObject,
     cancelled: *bool,
+    can_release: bool = true
 };
 
 pub inline fn release_python_generic_callback(allocator: std.mem.Allocator, data: GenericCallbackData) void {
+    if (!data.can_release) return;
+
     for (data.args) |arg| python_c.py_decref(arg);
     allocator.free(data.args);
 

@@ -13,7 +13,7 @@ const LoopObject = Loop.Python.LoopObject;
 const std = @import("std");
 const builtin = @import("builtin");
 
-inline fn get_callback_info(allocator: std.mem.Allocator, args: []?PyObject) ![]PyObject {
+pub inline fn get_callback_info(allocator: std.mem.Allocator, args: []?PyObject) ![]PyObject {
     const callback_info = try allocator.alloc(PyObject, args.len);
     errdefer allocator.free(callback_info);
 

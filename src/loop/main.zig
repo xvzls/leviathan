@@ -99,6 +99,8 @@ pub fn release(self: *Loop) void {
         }
     }
 
+    self.unix_signals.deinit() catch unreachable;
+
     for (&self.ready_tasks_queues) |*ready_tasks_queue| {
         _  = CallbackManager.execute_callbacks(allocator, ready_tasks_queue, .Stop, false);
         const queue = &ready_tasks_queue.queue;
@@ -115,8 +117,6 @@ pub fn release(self: *Loop) void {
     if (self.unlock_epoll_fd != -1) {
         std.posix.close(self.unlock_epoll_fd);
     }
-
-    self.unix_signals.deinit();
 
     allocator.free(self.blocking_ready_epoll_events);
     allocator.free(self.blocking_ready_tasks);

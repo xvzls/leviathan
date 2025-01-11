@@ -77,24 +77,45 @@ fn signal_handler(
 }
 
 fn default_sigint_signal_callback(
-    _: ?*anyopaque, _: CallbackManager.ExecuteCallbacksReturn
+    _: ?*anyopaque, status: CallbackManager.ExecuteCallbacksReturn
 ) CallbackManager.ExecuteCallbacksReturn {
+    if (status != .Continue) return status;
     python_c.PyErr_SetNone(python_c.PyExc_KeyboardInterrupt);
     return .Exception;
 }
 
 pub fn link(self: *UnixSignals, sig: u6, callback: CallbackManager.Callback) !void {
-    try self.callbacks.put(sig, callback);
-    self.callbacks.rehash();
+    switch (@as(CallbackManager.CallbackType, callback)) {
+        .ZigGeneric,.PythonGeneric => {},
+        else => return error.InvalidCallback
+    }
 
     const mask = &self.mask;
     sigaddset(mask, sig);
     std.posix.sigprocmask(std.os.linux.SIG.BLOCK, mask, null);
     self.fd = try std.posix.signalfd(self.fd, mask, 0);
+
+    const prev = try self.callbacks.fetchPut(sig, callback);
+    self.callbacks.rehash();
+
+    if (prev) |v| {
+        var prev_callback = v.value;
+
+        CallbackManager.cancel_callback(&prev_callback, true);
+        try Loop.Scheduling.Soon._dispatch(self.loop, prev_callback);
+    }
 }
 
 pub fn unlink(self: *UnixSignals, sig: u6) !void {
-    if (!self.callbacks.remove(sig)) return error.KeyNotFound;
+    var callback_info = self.callbacks.get(sig);
+    if (callback_info) |*v| {
+        CallbackManager.cancel_callback(v, true);
+        try Loop.Scheduling.Soon._dispatch(self.loop, v.*);
+    }else{
+        return error.KeyNotFound;
+    }
+    if (callback_info == null) return error.KeyNotFound;
+
 
     const callback: CallbackManager.Callback = switch (sig) {
         std.os.linux.SIG.INT => CallbackManager.Callback{
@@ -104,6 +125,7 @@ pub fn unlink(self: *UnixSignals, sig: u6) !void {
             }
         },
         else => {
+            _ = self.callbacks.remove(sig);
             var mask: std.posix.sigset_t = std.posix.empty_sigset;
 
             sigaddset(&mask, sig);
@@ -111,6 +133,7 @@ pub fn unlink(self: *UnixSignals, sig: u6) !void {
 
             sigdelset(&self.mask, sig);
             self.fd = try std.posix.signalfd(self.fd, &self.mask, 0);
+            return;
         }
     };
 
@@ -128,7 +151,7 @@ pub fn init(loop: *Loop) !void {
         .loop = loop
     };
     const unix_signals = &loop.unix_signals;
-    errdefer unix_signals.deinit();
+    errdefer unix_signals.deinit() catch unreachable;
 
     try unix_signals.link(std.os.linux.SIG.INT, CallbackManager.Callback{
         .ZigGeneric = .{
@@ -156,12 +179,20 @@ pub fn init(loop: *Loop) !void {
     });
 }
 
-pub fn deinit(self: *UnixSignals) void {
+pub fn deinit(self: *UnixSignals) !void {
     std.posix.close(self.fd);
+    const loop = self.loop;
+
     var iter = self.callbacks.keyIterator();
     var mask: std.posix.sigset_t = std.posix.empty_sigset;
+
     while (iter.next()) |sig| {
         sigaddset(&mask, sig.*);
+
+        var value = self.callbacks.get(sig.*).?;
+        CallbackManager.cancel_callback(&value, true);
+        try Loop.Scheduling.Soon._dispatch(loop, value);
+
         const removed = self.callbacks.remove(sig.*);
         if (!removed) @panic("Error removing signal");
     }

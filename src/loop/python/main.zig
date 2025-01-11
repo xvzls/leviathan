@@ -9,6 +9,7 @@ const Constructors = @import("constructors.zig");
 const Scheduling = @import("scheduling.zig");
 const Control = @import("control.zig");
 const Utils = @import("utils/main.zig");
+const UnixSignal = @import("unix_signals.zig");
 pub const Hooks = @import("hooks.zig");
 
 const PythonLoopMethods: []const python_c.PyMethodDef = &[_]python_c.PyMethodDef{
@@ -88,6 +89,20 @@ const PythonLoopMethods: []const python_c.PyMethodDef = &[_]python_c.PyMethodDef
         .ml_meth = @ptrCast(&Utils.Task.loop_create_task),
         .ml_doc = "Schedule callback to be called with args arguments at the next iteration of the event loop.\x00",
         .ml_flags = python_c.METH_FASTCALL | python_c.METH_KEYWORDS
+    },
+
+
+    python_c.PyMethodDef{
+        .ml_name = "add_signal_handler\x00",
+        .ml_meth = @ptrCast(&UnixSignal.loop_add_signal_handler),
+        .ml_doc = "Schedule callback to be called with args arguments at the next iteration of the event loop.\x00",
+        .ml_flags = python_c.METH_FASTCALL
+    },
+    python_c.PyMethodDef{
+        .ml_name = "remove_signal_handler\x00",
+        .ml_meth = @ptrCast(&UnixSignal.loop_remove_signal_handler),
+        .ml_doc = "Schedule callback to be called with args arguments at the next iteration of the event loop.\x00",
+        .ml_flags = python_c.METH_O
     },
 
     // --------------------- Sentinel ---------------------
