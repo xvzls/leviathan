@@ -25,6 +25,7 @@ pub inline fn future_set_initial_values(self: *PythonFutureObject) void {
 
     self.cancel_msg_py_object = null;
     self.blocking = 0;
+    self.log_destroy_pending = 1;
 }
 
 pub inline fn future_init_configuration(self: *PythonFutureObject, leviathan_loop: *LoopObject) void {
@@ -71,6 +72,10 @@ pub fn future_clear(self: ?*PythonFutureObject) callconv(.C) c_int {
     const py_future = self.?;
     const future_data = utils.get_data_ptr(Future, py_future);
     if (!future_data.released) {
+        const _result = future_data.result;
+        if (_result) |res| {
+            python_c.py_decref(@alignCast(@ptrCast(res)));
+        }
         future_data.release();
     }
 

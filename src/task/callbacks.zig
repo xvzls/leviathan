@@ -62,7 +62,7 @@ fn create_new_py_exception_and_add_event(
     const py_message: PyObject = python_c.PyUnicode_FromString(message.ptr) orelse return error.PythonError;
     defer python_c.py_decref(py_message);
 
-    const exception = python_c.PyObject_CallOneArg(python_c.PyExc_RuntimeError, task_repr)
+    const exception = python_c.PyObject_CallOneArg(python_c.PyExc_RuntimeError, py_message)
         orelse return error.PythonError;
     errdefer python_c.py_decref(exception);
 
@@ -130,11 +130,11 @@ inline fn handle_legacy_future_object(
         future, "_asyncio_future_blocking\x00"
     ) orelse return .Exception;
 
-    if (python_c.PyBool_Check(asyncio_future_blocking) != 0) {
+    if (python_c.PyObject_TypeCheck(asyncio_future_blocking, &python_c.PyBool_Type) == 0) {
         return execute_zig_function(
             create_new_py_exception_and_add_event, .{
                 loop_data, allocator, "Task {s} got bad yield: {s}\x00",
-                task, future
+                task, asyncio_future_blocking
             }
         );
     }
@@ -144,18 +144,18 @@ inline fn handle_legacy_future_object(
             future, "add_done_callback\x00"
         ) orelse return .Exception;
         defer python_c.py_decref(add_done_callback_func);
-
+        
         const wrapper: PyObject = python_c.PyCFunction_New(
             @constCast(&LeviathanPyTaskWakeupMethod), @ptrCast(task)
         ) orelse return .Exception;
+        defer python_c.py_decref(wrapper);
 
         const ret: PyObject = python_c.PyObject_CallOneArg(add_done_callback_func, wrapper) orelse {
-            python_c.py_decref(wrapper);
             return .Exception;
         };
         python_c.py_decref(ret);
         python_c.py_incref(@ptrCast(task));
-        
+
         if (python_c.PyObject_SetAttrString(future, "_asyncio_future_blocking", python_c.get_py_false()) < 0) {
             return .Exception;
         }
@@ -274,6 +274,11 @@ inline fn failed_execution(
     const future_data = utils.get_data_ptr(Future, fut);
     const exception: PyObject = python_c.PyErr_GetRaisedException() orelse return .Exception;
     defer python_c.py_decref(exception);
+
+    const ret: PyObject = python_c.PyObject_CallOneArg(
+        py_loop.unregister_task_func.?, @ptrCast(task)
+    ) orelse return .Exception;
+    python_c.py_decref(ret);
 
     if (exc_match(exception, python_c.PyExc_StopIteration) > 0) {
         if (task.must_cancel) {

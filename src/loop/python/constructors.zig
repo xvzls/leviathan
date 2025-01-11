@@ -47,6 +47,22 @@ inline fn z_loop_new(
         orelse return error.PythonError;
     errdefer python_c.py_decref(leave_task_func);
 
+    const register_task_func: PyObject = python_c.PyObject_GetAttrString(asyncio_module, "_register_task\x00")
+        orelse return error.PythonError;
+    errdefer python_c.py_decref(register_task_func);
+
+    const unregister_task_func: PyObject = python_c.PyObject_GetAttrString(asyncio_module, "_unregister_task\x00")
+        orelse return error.PythonError;
+    errdefer python_c.py_decref(unregister_task_func);
+
+    const asyncion_tasks_modules: PyObject = python_c.PyObject_GetAttrString(asyncio_module, "tasks\x00")
+        orelse return error.PythonError;
+    defer python_c.py_decref(asyncion_tasks_modules);
+
+    const scheduled_tasks: PyObject = python_c.PyObject_GetAttrString(asyncion_tasks_modules, "_scheduled_tasks\x00")
+        orelse return error.PythonError;
+    errdefer python_c.py_decref(scheduled_tasks);
+
     const sys_module: PyObject = python_c.PyImport_ImportModule("sys\x00")
         orelse return error.PythonError;
     errdefer python_c.py_decref(sys_module);
@@ -65,7 +81,7 @@ inline fn z_loop_new(
 
     const weakref_set_class: PyObject = python_c.PyObject_GetAttrString(weakref_module, "WeakSet\x00")
         orelse return error.PythonError;
-    errdefer python_c.py_decref(weakref_set_class);
+    defer python_c.py_decref(weakref_set_class);
 
     const weakref_set: PyObject = python_c.PyObject_CallNoArgs(weakref_set_class)
         orelse return error.PythonError;
@@ -95,6 +111,9 @@ inline fn z_loop_new(
 
     instance.enter_task_func = enter_task_func;
     instance.leave_task_func = leave_task_func;
+    instance.register_task_func = register_task_func;
+    instance.unregister_task_func = unregister_task_func;
+    instance.scheduled_tasks = scheduled_tasks;
 
     instance.contextvars_module = contextvars_module;
     instance.contextvars_copy = contextvars_copy;

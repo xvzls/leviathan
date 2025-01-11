@@ -23,6 +23,8 @@ inline fn task_set_initial_values(self: *PythonTaskObject) void {
 
     self.fut_waiter = null;
 
+    self.weakref_list = null;
+
     self.cancel_requests = 0;
     self.must_cancel = false;
 }
@@ -33,10 +35,15 @@ inline fn task_init_configuration(
 ) !void {
     Future.Python.Constructors.future_init_configuration(&self.fut, loop);
     if (python_c.PyCoro_CheckExact(coro) == 0) {
-        python_c.PyErr_SetString(
-            python_c.PyExc_TypeError, "Coro argument must be a coroutine\x00"
-        );
-        return error.PythonError;
+        const await_attr: ?PyObject = python_c.PyObject_GetAttrString(coro, "__await__\x00");
+        if (await_attr) |v| {
+            python_c.py_decref(v);
+        }else{
+            python_c.PyErr_SetString(
+                python_c.PyExc_TypeError, "Coro argument must be a coroutine\x00"
+            );
+            return error.PythonError;
+        }
     }
 
     const coro_send: PyObject = python_c.PyObject_GetAttrString(coro, "send\x00") orelse return error.PythonError;
@@ -57,6 +64,10 @@ inline fn task_init_configuration(
 }
 
 inline fn task_schedule_coro(self: *PythonTaskObject, loop: *LoopObject) !void {
+    const ret: PyObject = python_c.PyObject_CallOneArg(loop.register_task_func.?, @ptrCast(self))
+        orelse return error.PythonError;
+    python_c.py_decref(ret);
+
     const loop_data = utils.get_data_ptr(Loop, loop);
 
     const callback: CallbackManager.Callback = .{
@@ -112,6 +123,10 @@ pub fn task_clear(self: ?*PythonTaskObject) callconv(.C) c_int {
 
     const future_data = utils.get_data_ptr(Future, fut);
     if (!future_data.released) {
+        const _result = future_data.result;
+        if (_result) |res| {
+            python_c.py_decref(@alignCast(@ptrCast(res)));
+        }
         future_data.release();
     }
 
@@ -129,6 +144,11 @@ pub fn task_clear(self: ?*PythonTaskObject) callconv(.C) c_int {
     python_c.py_decref_and_set_null(&py_task.coro_throw);
 
     python_c.py_decref_and_set_null(&py_task.fut_waiter);
+
+    if (py_task.weakref_list) |list| {
+        python_c.PyObject_ClearWeakRefs(list);
+        py_task.weakref_list = null;
+    }
 
     return 0;
 }

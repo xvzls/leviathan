@@ -25,7 +25,7 @@ inline fn z_loop_run_forever(self: *LoopObject) !PyObject {
 
     defer {
         const exc = python_c.PyErr_GetRaisedException();
-        if (python_c.PyObject_CallOneArg(set_running_loop, @ptrCast(self))) |v| {
+        if (python_c.PyObject_CallOneArg(set_running_loop, python_c.get_py_none())) |v| {
             python_c.py_decref(v);
             python_c.PyErr_SetRaisedException(exc);
         }
@@ -70,7 +70,16 @@ pub fn loop_is_closed(self: ?*LoopObject, _: ?PyObject) callconv(.C) ?PyObject {
 }
 
 pub fn loop_close(self: ?*LoopObject, _: ?PyObject) callconv(.C) ?PyObject {
-    const loop_data = utils.get_data_ptr(Loop, self.?);
+    const instance = self.?;
+    const clear_func: PyObject = python_c.PyObject_GetAttrString(instance.scheduled_tasks.?, "clear\x00")
+        orelse return null;
+    defer python_c.py_decref(clear_func);
+
+    const ret: PyObject = python_c.PyObject_CallNoArgs(clear_func)
+        orelse return null;
+    python_c.py_decref(ret);
+
+    const loop_data = utils.get_data_ptr(Loop, instance);
 
     {
         const mutex = &loop_data.mutex;

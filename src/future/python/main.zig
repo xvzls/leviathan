@@ -88,7 +88,8 @@ pub const FutureObject = extern struct {
     exception_tb: ?PyObject,
 
     cancel_msg_py_object: ?PyObject,
-    blocking: u64
+    blocking: u64,
+    log_destroy_pending: u64
 };
 
 const PythonFutureMembers: []const python_c.PyMemberDef = &[_]python_c.PyMemberDef{
@@ -96,6 +97,12 @@ const PythonFutureMembers: []const python_c.PyMemberDef = &[_]python_c.PyMemberD
         .name = "_asyncio_future_blocking\x00",
         .type = python_c.Py_T_BOOL,
         .offset = @offsetOf(FutureObject, "blocking"),
+        .doc = null,
+    },
+    python_c.PyMemberDef{ // Just for be supported by asyncio.gather
+        .name = "_log_destroy_pending\x00", // This doesn't do anything
+        .type = python_c.Py_T_BOOL,
+        .offset = @offsetOf(FutureObject, "log_destroy_pending"),
         .doc = null,
     },
     python_c.PyMemberDef{

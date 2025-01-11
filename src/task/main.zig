@@ -120,6 +120,8 @@ pub const PythonTaskObject = extern struct {
 
     fut_waiter: ?PyObject,
 
+    weakref_list: ?PyObject,
+
     cancel_requests: usize,
     must_cancel: bool,
 };
@@ -137,5 +139,6 @@ pub var PythonTaskType = python_c.PyTypeObject{
     .tp_clear = @ptrCast(&Constructors.task_clear),
     .tp_dealloc = @ptrCast(&Constructors.task_dealloc),
     .tp_methods = @constCast(PythonTaskMethods.ptr),
-    .tp_members = @constCast(PythonTaskMembers.ptr)
+    .tp_members = @constCast(PythonTaskMembers.ptr),
+    .tp_weaklistoffset = @offsetOf(PythonTaskObject, "weakref_list"),
 };

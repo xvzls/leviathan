@@ -49,12 +49,7 @@ pub fn future_cancel(
         else => {}
     }
 
-    var kwlist: [2][*c]u8 = undefined;
-    kwlist[0] = @constCast("msg\x00");
-    kwlist[1] = null;
-
     var cancel_msg_py_object: ?PyObject = null;
-
     python_c.parse_vector_call_kwargs(
         knames, args.?,
         &.{"msg\x00"},

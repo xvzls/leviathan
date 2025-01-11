@@ -53,7 +53,33 @@ pub fn callback_for_python_future_callbacks(data: Data) CallbackManager.ExecuteC
             orelse return .Exception;
         defer python_c.py_decref(exception);
 
-        const exc_handler_ret: PyObject = python_c.PyObject_CallOneArg(data.exception_handler, exception)
+        const exc_message: PyObject = python_c.PyUnicode_FromString("Exception ocurred executing callback\x00")
+            orelse return .Exception;
+        defer python_c.py_decref(exc_message);
+
+        var exc_args: [4]?PyObject = undefined;
+        exc_args[0] = exception;
+        exc_args[1] = exc_message;
+        exc_args[2] = data.args[0];
+        exc_args[3] = @ptrCast(args[1]);
+
+        const message_kname: PyObject = python_c.PyUnicode_FromString("message\x00")
+            orelse return .Exception;
+        defer python_c.py_decref(message_kname);
+
+        const callback_kname: PyObject = python_c.PyUnicode_FromString("callback\x00")
+            orelse return .Exception;
+        defer python_c.py_decref(callback_kname);
+
+        const future_kname: PyObject = python_c.PyUnicode_FromString("future\x00")
+            orelse return .Exception;
+        defer python_c.py_decref(future_kname);
+
+        const knames: PyObject = python_c.PyTuple_Pack(3, message_kname, callback_kname, future_kname)
+            orelse return .Exception;
+        defer python_c.py_decref(knames);
+
+        const exc_handler_ret: PyObject = python_c.PyObject_Vectorcall(data.exception_handler, &exc_args, 1, knames)
             orelse return .Exception;
         python_c.py_decref(exc_handler_ret);
     }

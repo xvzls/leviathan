@@ -97,12 +97,12 @@ class _LoopHelpers:
         asyncgens.clear()
 
         results = await asyncio.gather(
-            *[ag.aclose() for ag in closing_agens], return_exceptions=True
+            *[agen.aclose() for agen in closing_agens], return_exceptions=True
         )
 
-        for result, agen in zip(results, closing_agens):
+        for result, agen in zip(results, closing_agens, strict=True):
             if isinstance(result, Exception):
-                self.call_exception_handler(
+                self._exception_handler(
                     {
                         "message": f"an error occurred during closing of "
                         f"asynchronous generator {agen!r}",

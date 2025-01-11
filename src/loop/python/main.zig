@@ -125,6 +125,9 @@ pub const LoopObject = extern struct {
     
     enter_task_func: ?PyObject,
     leave_task_func: ?PyObject,
+    register_task_func: ?PyObject,
+    unregister_task_func: ?PyObject,
+    scheduled_tasks: ?PyObject,
 
     contextvars_module: ?PyObject,
     contextvars_copy: ?PyObject,
@@ -151,6 +154,7 @@ pub var LoopType = python_c.PyTypeObject{
     .tp_clear = @ptrCast(&Constructors.loop_clear),
     .tp_init = @ptrCast(&Constructors.loop_init),
     .tp_dealloc = @ptrCast(&Constructors.loop_dealloc),
-    .tp_methods = @constCast(PythonLoopMethods.ptr)
+    .tp_methods = @constCast(PythonLoopMethods.ptr),
+    .tp_members = @constCast(LoopMembers.ptr),
 };
 
