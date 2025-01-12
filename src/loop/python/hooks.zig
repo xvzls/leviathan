@@ -104,12 +104,8 @@ pub fn setup_asyncgen_hooks(self: *LoopObject) !void {
 }
 
 pub fn cleanup_asyncgen_hooks(self: *LoopObject) void {
-    const current_exc: ?PyObject = python_c.PyErr_GetRaisedException();
-
     const ret: PyObject = python_c.PyObject_CallObject(self.set_asyncgen_hooks.?, self.old_asyncgen_hooks.?)
         orelse return;
     python_c.py_decref(ret);
-
-    python_c.PyErr_SetRaisedException(current_exc);
     python_c.py_decref_and_set_null(&self.old_asyncgen_hooks);
 }

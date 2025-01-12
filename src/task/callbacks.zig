@@ -245,7 +245,7 @@ inline fn successfully_execution(
 ) CallbackManager.ExecuteCallbacksReturn {
     if (python_c.PyObject_TypeCheck(result, &Future.Python.FutureType) != 0) {
         return handle_leviathan_future_object(task, @ptrCast(result), loop_data);
-    }else if (python_c.Py_IsNone(result) != 0) {
+    }else if (python_c.is_none(result)) {
         const callback: CallbackManager.Callback = .{
             .PythonTask = .{
                 .task = task

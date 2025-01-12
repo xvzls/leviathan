@@ -28,7 +28,7 @@ inline fn z_loop_create_task(
     errdefer python_c.py_xdecref(name);
 
     if (context) |py_ctx| {
-        if (python_c.Py_IsNone(py_ctx) != 0) {
+        if (python_c.is_none(py_ctx)) {
             context = python_c.PyObject_CallNoArgs(self.contextvars_copy.?)
                 orelse return error.PythonError;
             python_c.py_decref(py_ctx);
@@ -41,9 +41,13 @@ inline fn z_loop_create_task(
     errdefer python_c.py_decref(context.?);
 
     if (name) |v| {
-        if (python_c.PyUnicode_Check(v) == 0) {
-            python_c.PyErr_SetString(python_c.PyExc_TypeError, "name must be a string\x00");
-            return error.PythonError;
+        if (python_c.is_none(v)) {
+            name = null;
+        }else{
+            if (python_c.PyUnicode_Check(v) == 0) {
+                python_c.PyErr_SetString(python_c.PyExc_TypeError, "name must be a string\x00");
+                return error.PythonError;
+            }
         }
     }
 

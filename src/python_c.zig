@@ -21,6 +21,11 @@ pub inline fn get_py_none() *Python.PyObject {
     return py_none_struct;
 }
 
+pub inline fn is_none(obj: *Python.PyObject) bool {
+    const py_none_struct: *Python.PyObject = @ptrCast(&Python._Py_NoneStruct);
+    return obj == py_none_struct;
+}
+
 pub inline fn py_incref(op: *Python.PyObject) void {
     const new_refcnt = op.unnamed_0.ob_refcnt_split[0] +| 1;
     if (new_refcnt == 0) {

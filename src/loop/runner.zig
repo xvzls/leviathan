@@ -3,6 +3,8 @@ const LinkedList = @import("../utils/linked_list.zig");
 const Loop = @import("main.zig");
 const CallbackManager = @import("../callback_manager.zig");
 
+const Lock = @import("../utils/lock.zig").Mutex;
+
 const utils = @import("../utils/utils.zig");
 const python_c = @import("python_c");
 const PyObject = *python_c.PyObject;
@@ -31,6 +33,7 @@ pub fn prune_callbacks_sets(
     var queue_len = queue.len;
     const max_number_of_callbacks_set = max_number_of_callbacks_set_ptr.*;
     if (queue_len <= max_number_of_callbacks_set) return;
+    // std.log.info("LOL", .{});
 
     if (max_number_of_callbacks_set == 1) {
         var node = queue.last.?;
@@ -60,28 +63,25 @@ pub fn prune_callbacks_sets(
 
 pub inline fn call_once(
     allocator: std.mem.Allocator, ready_queue: *CallbackManager.CallbacksSetsQueue,
-    max_number_of_callbacks_set_ptr: *usize, ready_tasks_queue_min_bytes_capacity: usize
+    max_number_of_callbacks_set_ptr: *usize, ready_tasks_queue_min_bytes_capacity: usize,
 ) CallbackManager.ExecuteCallbacksReturn {
     const ret = CallbackManager.execute_callbacks(allocator, ready_queue, .Continue, true);
-    prune_callbacks_sets(
-        allocator, ready_queue, max_number_of_callbacks_set_ptr,
-        ready_tasks_queue_min_bytes_capacity
-    );
+    if (ret == .None) {
+        prune_callbacks_sets(
+            allocator, ready_queue, max_number_of_callbacks_set_ptr,
+            ready_tasks_queue_min_bytes_capacity
+        );
+    }
 
     return ret;
 }
 
 inline fn fetch_completed_tasks(
-    loop: *Loop, allocator: std.mem.Allocator, epoll_fd: std.posix.fd_t, blocking_tasks_queue: *LinkedList,
+    allocator: std.mem.Allocator, epoll_fd: std.posix.fd_t, blocking_tasks_queue: *LinkedList,
     blocking_tasks_set: ?*Loop.Scheduling.IO.BlockingTasksSet, blocking_ready_tasks: []std.os.linux.io_uring_cqe,
     ready_queue: *CallbackManager.CallbacksSetsQueue
 ) !void {
-    var eventfd_val: [8]u8 = undefined;
-    var event_fd: std.posix.fd_t = undefined;
     if (blocking_tasks_set) |set| {
-        const data_read = try std.posix.read(set.eventfd, &eventfd_val);
-        if (data_read != 8) unreachable;
-
         const ring = &set.ring;
         const nevents = try ring.copy_cqes(blocking_ready_tasks, 0);
         for (blocking_ready_tasks[0..nevents]) |cqe| {
@@ -95,28 +95,12 @@ inline fn fetch_completed_tasks(
 
         if (set.free_items_count == Loop.Scheduling.IO.TotalItems) {
             Loop.Scheduling.IO.remove_tasks_set(epoll_fd, blocking_tasks_queue, set);
-        }else{
-            event_fd = set.eventfd;
         }
-    }else{
-        event_fd = loop.unlock_epoll_fd;
-
-        const data_read = try std.posix.read(event_fd, &eventfd_val);
-        if (data_read != 8) unreachable;
     }
-
-    // var epoll_event: std.os.linux.epoll_event = .{
-    //     .events = std.os.linux.EPOLL.IN,
-    //     .data = std.os.linux.epoll_data{
-    //         .ptr = @intFromPtr(blocking_tasks_set)
-    //     }
-    // };
-
-    // try std.posix.epoll_ctl(epoll_fd, std.os.linux.EPOLL.CTL_ADD, event_fd, &epoll_event);
 }
 
 fn poll_blocking_events(
-    loop: *Loop, mutex: *std.Thread.Mutex, wait: bool, ready_queue: *CallbackManager.CallbacksSetsQueue
+    loop: *Loop, mutex: *Lock, wait: bool, ready_queue: *CallbackManager.CallbacksSetsQueue
 ) !void {
     const epoll_fd = loop.blocking_tasks_epoll_fd;
     const blocking_ready_epoll_events = loop.blocking_ready_epoll_events;
@@ -142,7 +126,7 @@ fn poll_blocking_events(
 
     for (blocking_ready_epoll_events[0..nevents]) |event| {
         try fetch_completed_tasks(
-            loop, allocator, epoll_fd, blocking_tasks_queue, @ptrFromInt(event.data.ptr),
+            allocator, epoll_fd, blocking_tasks_queue, @ptrFromInt(event.data.ptr),
             blocking_ready_tasks, ready_queue
         );
     }
@@ -194,7 +178,8 @@ pub fn start(self: *Loop) !void {
 
         wait_for_blocking_events = switch (
             call_once(
-                allocator, ready_tasks_queue, &max_callbacks_set_per_queue[old_index], ready_tasks_queue_min_bytes_capacity
+                allocator, ready_tasks_queue, &max_callbacks_set_per_queue[old_index],
+                ready_tasks_queue_min_bytes_capacity,
             )
         ) {
             .Continue => false,

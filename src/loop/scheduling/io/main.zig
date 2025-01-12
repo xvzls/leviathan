@@ -80,6 +80,7 @@ pub const BlockingTasksSet = struct {
     }
 
     pub fn push(self: *BlockingTasksSet, data: CallbackManger.Callback) !*BlockingTaskData {
+        @setRuntimeSafety(false);
         if (self.free_items_count == 0) {
             return error.NoFreeItems;
         }
@@ -100,6 +101,7 @@ pub const BlockingTasksSet = struct {
     }
 
     pub inline fn pop(self: *BlockingTasksSet, data: *BlockingTaskData) !void {
+        @setRuntimeSafety(false);
         const id = data.id;
         if (self.free_items_count == TotalItems) {
             return error.NoBusyItems;
@@ -167,7 +169,7 @@ inline fn get_blocking_tasks_set(
     }
 
     var epoll_event: std.os.linux.epoll_event = .{
-        .events = std.os.linux.EPOLL.IN,
+        .events = std.os.linux.EPOLL.IN | std.os.linux.EPOLL.ET,
         .data = std.os.linux.epoll_data{
             .ptr = @intFromPtr(new_set)
         }

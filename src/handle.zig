@@ -132,7 +132,7 @@ inline fn z_handle_init(
     }
     
     if (py_context) |ctx| {
-        if (python_c.Py_IsNone(ctx) != 0) {
+        if (python_c.is_none(ctx)) {
             utils.put_python_runtime_error_message("context cannot be None\x00");
             return error.PythonError;
         }

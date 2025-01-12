@@ -29,7 +29,7 @@ inline fn z_future_add_done_callback(
 
     const py_loop = self.py_loop.?;
     if (context) |py_ctx| {
-        if (python_c.Py_IsNone(py_ctx) != 0) {
+        if (python_c.is_none(py_ctx)) {
             context = python_c.PyObject_CallNoArgs(py_loop.contextvars_copy.?)
                 orelse return error.PythonError;
         }else{

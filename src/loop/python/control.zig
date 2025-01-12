@@ -14,24 +14,52 @@ inline fn z_loop_run_forever(self: *LoopObject) !PyObject {
     const loop_data = utils.get_data_ptr(Loop, self);
 
     try Loop.Python.Hooks.setup_asyncgen_hooks(self);
-    defer Loop.Python.Hooks.cleanup_asyncgen_hooks(self);
 
     const set_running_loop = self.set_running_loop.?;
     if (python_c.PyObject_CallOneArg(set_running_loop, @ptrCast(self))) |v| {
         python_c.py_decref(v);
     }else{
+        const exc = python_c.PyErr_GetRaisedException();
+        Loop.Python.Hooks.cleanup_asyncgen_hooks(self);
+        python_c.PyErr_SetRaisedException(exc);
         return error.PythonError;
     }
 
-    defer {
-        const exc = python_c.PyErr_GetRaisedException();
-        if (python_c.PyObject_CallOneArg(set_running_loop, python_c.get_py_none())) |v| {
-            python_c.py_decref(v);
-            python_c.PyErr_SetRaisedException(exc);
+    var error_holder: ?anyerror = null;
+    var py_exception: ?PyObject = null;
+
+    Loop.Runner.start(loop_data) catch |err| {
+        error_holder = err;
+
+        if (err == error.PythonError) {
+            py_exception = python_c.PyErr_GetRaisedException() orelse unreachable;
         }
+    };
+
+    if (python_c.PyObject_CallOneArg(set_running_loop, python_c.get_py_none())) |v| {
+        python_c.py_decref(v);
+    }else{
+        const py_exc = python_c.PyErr_GetRaisedException() orelse unreachable;
+        if (py_exception) |v| {
+            python_c.PyException_SetCause(py_exc, v);
+        }else{
+            utils.put_python_runtime_error_message(@errorName(error_holder.?));
+            const exc: PyObject = python_c.PyErr_GetRaisedException() orelse unreachable;
+
+            error_holder = error.PythonError;
+            python_c.PyException_SetCause(py_exc, exc);
+        }
+        py_exception = py_exc;
     }
 
-    try Loop.Runner.start(loop_data);
+    Loop.Python.Hooks.cleanup_asyncgen_hooks(self);
+    if (py_exception) |v| {
+        python_c.PyErr_SetRaisedException(v);
+    }
+
+    if (error_holder) |err| {
+        return err;
+    }
     return python_c.get_py_none();
 }
 

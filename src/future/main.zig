@@ -4,6 +4,8 @@ const builtin = @import("builtin");
 const Loop = @import("../loop/main.zig");
 const CallbackManager = @import("../callback_manager.zig");
 
+const lock = @import("../utils/lock.zig");
+
 const LinkedList = @import("../utils/linked_list.zig");
 
 pub const FutureStatus = enum {
@@ -13,7 +15,7 @@ pub const FutureStatus = enum {
 result: ?*anyopaque = null,
 status: FutureStatus = .PENDING,
 
-mutex: std.Thread.Mutex = .{},
+mutex: lock.Mutex = lock.init(),
 
 callbacks_arena: std.heap.ArenaAllocator,
 callbacks_arena_allocator: std.mem.Allocator = undefined,

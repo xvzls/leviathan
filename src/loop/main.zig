@@ -6,6 +6,8 @@ const python_c = @import("python_c");
 
 const LinkedList = @import("../utils/linked_list.zig");
 
+const lock = @import("../utils/lock.zig");
+
 pub const MaxCallbacks = 128;
 
 allocator: std.mem.Allocator,
@@ -25,7 +27,7 @@ epoll_locked: bool = false,
 max_callbacks_sets_per_queue: [2]usize,
 ready_tasks_queue_min_bytes_capacity: usize,
 
-mutex: std.Thread.Mutex,
+mutex: lock.Mutex,
 
 unix_signals: UnixSignals,
 
@@ -51,7 +53,7 @@ pub fn init(self: *Loop, allocator: std.mem.Allocator, rtq_min_capacity: usize) 
 
     self.* = .{
         .allocator = allocator,
-        .mutex = std.Thread.Mutex{},
+        .mutex = lock.init(),
         .ready_tasks_queues = .{
             .{
                 .queue = LinkedList.init(allocator),

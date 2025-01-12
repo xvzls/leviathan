@@ -215,7 +215,7 @@ inline fn z_task_init(
     }
 
     if (context) |*py_ctx| {
-        if (python_c.Py_IsNone(py_ctx.*) != 0) {
+        if (python_c.is_none(py_ctx.*)) {
             py_ctx.* = python_c.PyObject_CallNoArgs(leviathan_loop.contextvars_copy.?)
                 orelse return error.PythonError;
         }else{
@@ -227,7 +227,7 @@ inline fn z_task_init(
     errdefer python_c.py_decref(context.?);
 
     if (name) |*v| {
-        if (python_c.Py_IsNone(v.*) != 0) {
+        if (python_c.is_none(v.*)) {
             python_c.py_decref_and_set_null(&name);
         }else if (python_c.PyUnicode_Check(v.*) == 0) {
             v.* = python_c.PyObject_Str(v.*) orelse return error.PythonError;

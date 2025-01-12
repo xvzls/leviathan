@@ -151,6 +151,9 @@ test "Running callbaks and prune" {
     const ret = Loop.Runner.call_once(
         allocator, &ready_tasks, &max_number_of_callbacks_set, 14*@sizeOf(CallbackManager.Callback)
     );
+    Loop.Runner.prune_callbacks_sets(
+        allocator, &ready_tasks, &max_number_of_callbacks_set, 14*@sizeOf(CallbackManager.Callback)
+    );
 
     try std.testing.expectEqual(ret, CallbackManager.ExecuteCallbacksReturn.Continue);
     try std.testing.expect(ready_tasks.queue.len <= max_number_of_callbacks_set);
