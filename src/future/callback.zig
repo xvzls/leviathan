@@ -4,7 +4,7 @@ const CallbackManager = @import("../callback_manager.zig");
 const Loop = @import("../loop/main.zig");
 const Future = @import("main.zig");
 
-const LinkedList = @import("../utils/linked_list.zig");
+const CallbacksSetLinkedList = CallbackManager.LinkedList;
 const utils = @import("../utils/utils.zig");
 
 const python_c = @import("python_c");
@@ -131,7 +131,7 @@ pub fn remove_done_callback(self: *Future, callback_id: u64) usize {
     var removed_count: usize = 0;
     while (node) |n| {
         node = n.next;
-        const queue: *CallbackManager.CallbacksSet = @alignCast(@ptrCast(n.data.?));
+        const queue: CallbackManager.CallbacksSet = n.data;
         for (queue.callbacks[0..queue.callbacks_num]) |*callback| {
             switch (@as(CallbackManager.CallbackType, callback.*)) {
                 .ZigGeneric => {

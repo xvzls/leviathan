@@ -3,7 +3,7 @@ const std = @import("std");
 const leviathan = @import("leviathan");
 
 const CallbackManager = leviathan.CallbackManager;
-const LinkedList = leviathan.utils.LinkedList;
+const LinkedList = CallbackManager.LinkedList;
 const Loop = leviathan.Loop;
 
 fn callback_test(data: ?*anyopaque, status: CallbackManager.ExecuteCallbacksReturn) CallbackManager.ExecuteCallbacksReturn {
@@ -23,7 +23,7 @@ test "Prune sets when maximum is 1" {
     };
     defer {
         for (0..ready_tasks.queue.len) |_| {
-            const set: *CallbackManager.CallbacksSet = @alignCast(@ptrCast(ready_tasks.queue.pop() catch unreachable));
+            const set: CallbackManager.CallbacksSet = ready_tasks.queue.pop() catch unreachable;
             CallbackManager.release_set(allocator, set);
         }
     }
@@ -54,7 +54,7 @@ test "Prune sets when maximum is more than 1" {
     };
     defer {
         for (0..ready_tasks.queue.len) |_| {
-            const set: *CallbackManager.CallbacksSet = @alignCast(@ptrCast(ready_tasks.queue.pop() catch unreachable));
+            const set: CallbackManager.CallbacksSet = ready_tasks.queue.pop() catch unreachable;
             CallbackManager.release_set(allocator, set);
         }
     }
@@ -91,7 +91,7 @@ test "Prune sets with high limit" {
     };
     defer {
         for (0..ready_tasks.queue.len) |_| {
-            const set: *CallbackManager.CallbacksSet = @alignCast(@ptrCast(ready_tasks.queue.pop() catch unreachable));
+            const set: CallbackManager.CallbacksSet = ready_tasks.queue.pop() catch unreachable;
             CallbackManager.release_set(allocator, set);
         }
     }
@@ -127,7 +127,7 @@ test "Running callbaks and prune" {
     };
     defer {
         for (0..ready_tasks.queue.len) |_| {
-            const set: *CallbackManager.CallbacksSet = @alignCast(@ptrCast(ready_tasks.queue.pop() catch unreachable));
+            const set: CallbackManager.CallbacksSet = ready_tasks.queue.pop() catch unreachable;
             CallbackManager.release_set(allocator, set);
         }
     }

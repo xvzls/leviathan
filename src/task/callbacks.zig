@@ -275,10 +275,10 @@ inline fn failed_execution(
     const exception: PyObject = python_c.PyErr_GetRaisedException() orelse return .Exception;
     defer python_c.py_decref(exception);
 
-    const ret: PyObject = python_c.PyObject_CallOneArg(
-        py_loop.unregister_task_func.?, @ptrCast(task)
-    ) orelse return .Exception;
-    python_c.py_decref(ret);
+    // const ret: PyObject = python_c.PyObject_CallOneArg(
+    //     py_loop.unregister_task_func.?, @ptrCast(task)
+    // ) orelse return .Exception;
+    // python_c.py_decref(ret);
 
     if (exc_match(exception, python_c.PyExc_StopIteration) > 0) {
         if (task.must_cancel) {

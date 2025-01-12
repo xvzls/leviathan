@@ -7,7 +7,7 @@ const Future = @import("future/main.zig");
 const Task = @import("task/main.zig");
 const Handle = @import("handle.zig");
 
-const LinkedList = @import("utils/linked_list.zig");
+pub const LinkedList = @import("utils/linked_list.zig").init(CallbacksSet);
 
 pub const ExecuteCallbacksReturn = enum {
     Stop,
@@ -57,18 +57,15 @@ pub inline fn get_max_callbacks_sets(rtq_min_capacity: usize, callbacks_set_leng
     );
 }
 
-pub inline fn create_new_set(allocator: std.mem.Allocator, size: usize) !*CallbacksSet {
-    const callbacks = try allocator.create(CallbacksSet);
-    errdefer allocator.destroy(callbacks);
-
-    callbacks.callbacks = try allocator.alloc(Callback, size);
-    callbacks.callbacks_num = 0;
-    return callbacks;
+pub inline fn create_new_set(allocator: std.mem.Allocator, size: usize) !CallbacksSet {
+    return .{
+        .callbacks = try allocator.alloc(Callback, size),
+        .callbacks_num = 0
+    };
 }
 
-pub fn release_set(allocator: std.mem.Allocator, set: *CallbacksSet) void {
+pub inline fn release_set(allocator: std.mem.Allocator, set: CallbacksSet) void {
     allocator.free(set.callbacks);
-    allocator.destroy(set);
 }
 
 pub inline fn cancel_callback(callback: *Callback, can_release: bool) void {
@@ -99,16 +96,16 @@ pub inline fn append_new_callback(
     allocator: std.mem.Allocator, sets_queue: *CallbacksSetsQueue, callback: Callback,
     max_callbacks: usize
 ) !*Callback {
-    var callbacks: *CallbacksSet = undefined;
+    var callbacks: CallbacksSet = undefined;
     var last_callbacks_set_len: usize = max_callbacks;
     var node = sets_queue.last_set;
     while (node) |n| {
-        callbacks = @alignCast(@ptrCast(n.data.?));
+        callbacks = n.data;
         const callbacks_num = callbacks.callbacks_num;
 
         if (callbacks_num < callbacks.callbacks.len) {
             callbacks.callbacks[callbacks_num] = callback;
-            callbacks.callbacks_num = callbacks_num + 1;
+            n.data.callbacks_num = callbacks_num + 1;
 
             sets_queue.last_set = n;
             return &callbacks.callbacks[callbacks_num];
@@ -196,7 +193,7 @@ pub fn execute_callbacks(
     var chunks_executed: usize = 0;
     while (_node) |node| : (chunks_executed += 1) {
         _node = node.next;
-        const callbacks_set: *CallbacksSet = @alignCast(@ptrCast(node.data.?));
+        const callbacks_set: CallbacksSet = node.data;
         const callbacks_num = callbacks_set.callbacks_num;
         if (callbacks_num == 0) {
             if (chunks_executed == 0) {
@@ -214,7 +211,7 @@ pub fn execute_callbacks(
                 else => unreachable
             }
         }
-        callbacks_set.callbacks_num = 0;
+        node.data.callbacks_num = 0;
     }
 
     return status;

@@ -3,6 +3,8 @@ const std = @import("std");
 const leviathan = @import("leviathan");
 const CallbackManager = leviathan.CallbackManager;
 
+const LinkedList = CallbackManager.LinkedList;
+
 const allocator = std.testing.allocator;
 
 test "Creating a new callback set" {
@@ -59,13 +61,11 @@ test "Run callback" {
 
 test "Append multiple sets" {
     var set_queue = CallbackManager.CallbacksSetsQueue{
-        .queue = leviathan.utils.LinkedList.init(allocator)
+        .queue = LinkedList.init(allocator)
     };
     defer {
         for (0..set_queue.queue.len) |_| {
-            const callbacks_set: *CallbackManager.CallbacksSet = @alignCast(
-                @ptrCast(set_queue.queue.pop() catch unreachable)
-            );
+            const callbacks_set: CallbackManager.CallbacksSet = set_queue.queue.pop() catch unreachable;
             CallbackManager.release_set(allocator, callbacks_set);
         }
     }
@@ -83,7 +83,7 @@ test "Append multiple sets" {
     var node = set_queue.queue.first;
     var callbacks_len: usize = 10;
     while (node) |n| {
-        const callbacks_set: *CallbackManager.CallbacksSet = @alignCast(@ptrCast(n.data.?));
+        const callbacks_set: CallbackManager.CallbacksSet = n.data;
         try std.testing.expectEqual(callbacks_len, callbacks_set.callbacks.len);
         try std.testing.expectEqual(callbacks_len, callbacks_set.callbacks_num);
         callbacks_len *= 2;
@@ -93,13 +93,11 @@ test "Append multiple sets" {
 
 test "Append new callback to set queue and execute it" {
     var set_queue = CallbackManager.CallbacksSetsQueue{
-        .queue = leviathan.utils.LinkedList.init(allocator)
+        .queue = LinkedList.init(allocator)
     };
     defer {
         for (0..set_queue.queue.len) |_| {
-            const callbacks_set: *CallbackManager.CallbacksSet = @alignCast(
-                @ptrCast(set_queue.queue.pop() catch unreachable)
-            );
+            const callbacks_set: CallbackManager.CallbacksSet = set_queue.queue.pop() catch unreachable;
             CallbackManager.release_set(allocator, callbacks_set);
         }
     }
@@ -118,9 +116,7 @@ test "Append new callback to set queue and execute it" {
 
     try std.testing.expect(set_queue.last_set != null);
 
-    const callbacks_set: *CallbackManager.CallbacksSet = @alignCast(
-        @ptrCast(set_queue.last_set.?.data.?)
-    );
+    const callbacks_set: *CallbackManager.CallbacksSet = &set_queue.last_set.?.data;
 
     try std.testing.expectEqual(1, callbacks_set.callbacks_num);
     try std.testing.expectEqual(ret, &callbacks_set.callbacks[0]);
@@ -140,13 +136,11 @@ test "Append new callback to set queue and execute it" {
 
 test "Append and cancel callbacks" {
     var set_queue = CallbackManager.CallbacksSetsQueue{
-        .queue = leviathan.utils.LinkedList.init(allocator)
+        .queue = LinkedList.init(allocator)
     };
     defer {
         for (0..set_queue.queue.len) |_| {
-            const callbacks_set: *CallbackManager.CallbacksSet = @alignCast(
-                @ptrCast(set_queue.queue.pop() catch unreachable)
-            );
+            const callbacks_set: CallbackManager.CallbacksSet = set_queue.queue.pop() catch unreachable;
             CallbackManager.release_set(allocator, callbacks_set);
         }
     }
@@ -171,13 +165,11 @@ test "Append and cancel callbacks" {
 
 test "Append and stopping with exception" {
     var set_queue = CallbackManager.CallbacksSetsQueue{
-        .queue = leviathan.utils.LinkedList.init(allocator)
+        .queue = LinkedList.init(allocator)
     };
     defer {
         for (0..set_queue.queue.len) |_| {
-            const callbacks_set: *CallbackManager.CallbacksSet = @alignCast(
-                @ptrCast(set_queue.queue.pop() catch unreachable)
-            );
+            const callbacks_set: CallbackManager.CallbacksSet = set_queue.queue.pop() catch unreachable;
             CallbackManager.release_set(allocator, callbacks_set);
         }
     }

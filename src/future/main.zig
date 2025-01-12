@@ -6,8 +6,6 @@ const CallbackManager = @import("../callback_manager.zig");
 
 const lock = @import("../utils/lock.zig");
 
-const LinkedList = @import("../utils/linked_list.zig");
-
 pub const FutureStatus = enum {
     PENDING, FINISHED, CANCELED
 };
@@ -33,7 +31,7 @@ pub fn init(self: *Future, loop: *Loop) void {
 
     self.callbacks_arena_allocator = self.callbacks_arena.allocator();
     self.callbacks_queue = .{
-        .queue = LinkedList.init(self.callbacks_arena_allocator),
+        .queue = CallbackManager.LinkedList.init(self.callbacks_arena_allocator),
         .last_set = null
     };
 }

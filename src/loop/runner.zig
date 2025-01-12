@@ -1,7 +1,8 @@
-const LinkedList = @import("../utils/linked_list.zig");
-
 const Loop = @import("main.zig");
 const CallbackManager = @import("../callback_manager.zig");
+
+const BlockingTasksSetLinkedList = Loop.Scheduling.IO.BlockingTasksSetLinkedList;
+const CallbacksSetLinkedList = CallbackManager.LinkedList;
 
 const Lock = @import("../utils/lock.zig").Mutex;
 
@@ -12,12 +13,11 @@ const PyObject = *python_c.PyObject;
 const std = @import("std");
 
 inline fn free_callbacks_set(
-    allocator: std.mem.Allocator, node: LinkedList.Node,
+    allocator: std.mem.Allocator, node: CallbacksSetLinkedList.Node,
     comptime field_name: []const u8
-) LinkedList.Node {
-    const callbacks_set: *CallbackManager.CallbacksSet = @alignCast(@ptrCast(node.data.?));
-    allocator.free(callbacks_set.callbacks);
-    allocator.destroy(callbacks_set);
+) CallbacksSetLinkedList.Node {
+    const callbacks_set: CallbackManager.CallbacksSet = node.data;
+    CallbackManager.release_set(allocator, callbacks_set);
 
     const next_node = @field(node, field_name).?;
     allocator.destroy(node);
@@ -49,7 +49,7 @@ pub fn prune_callbacks_sets(
             node = free_callbacks_set(allocator, node, "next");
         }
 
-        const callbacks_set: *CallbackManager.CallbacksSet = @alignCast(@ptrCast(node.data.?));
+        const callbacks_set: CallbackManager.CallbacksSet = node.data;
         node.prev = null;
         queue.first = node;
         ready_tasks.last_set = node;
@@ -77,7 +77,7 @@ pub inline fn call_once(
 }
 
 inline fn fetch_completed_tasks(
-    allocator: std.mem.Allocator, epoll_fd: std.posix.fd_t, blocking_tasks_queue: *LinkedList,
+    allocator: std.mem.Allocator, epoll_fd: std.posix.fd_t, blocking_tasks_queue: *BlockingTasksSetLinkedList,
     blocking_tasks_set: ?*Loop.Scheduling.IO.BlockingTasksSet, blocking_ready_tasks: []std.os.linux.io_uring_cqe,
     ready_queue: *CallbackManager.CallbacksSetsQueue
 ) !void {
@@ -85,15 +85,15 @@ inline fn fetch_completed_tasks(
         const ring = &set.ring;
         const nevents = try ring.copy_cqes(blocking_ready_tasks, 0);
         for (blocking_ready_tasks[0..nevents]) |cqe| {
-            const blocking_task_data: *Loop.Scheduling.IO.BlockingTaskData = @ptrFromInt(cqe.user_data);
-            set.pop(blocking_task_data) catch unreachable;
+            const blocking_task_data: Loop.Scheduling.IO.BlockingTaskDataLinkedList.Node = @ptrFromInt(cqe.user_data);
+            try set.pop(blocking_task_data);
 
             _ = try CallbackManager.append_new_callback(
                 allocator, ready_queue, blocking_task_data.data, Loop.MaxCallbacks
             );
         }
 
-        if (set.free_items_count == Loop.Scheduling.IO.TotalItems) {
+        if (set.tasks_data.len == 0) {
             Loop.Scheduling.IO.remove_tasks_set(epoll_fd, blocking_tasks_queue, set);
         }
     }

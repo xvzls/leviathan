@@ -1,4 +1,4 @@
-const LinkedList = @import("leviathan").utils.LinkedList;
+const LinkedList = @import("leviathan").utils.LinkedList.init(?*anyopaque);
 
 const std = @import("std");
 

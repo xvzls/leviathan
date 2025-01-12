@@ -19,7 +19,7 @@ BENCHMARK_FUNCTIONS: List[
     # (benchmark3_run, benchmark3_name)
 ]
 
-N: int = 1
+N: int = 2
 ITERATIONS = 10
 
 M_INITIAL: int = 64 * 2 ** 10
