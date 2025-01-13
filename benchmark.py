@@ -135,7 +135,7 @@ def plot_results(results: Dict[str, List[Tuple[int, float]]], name: str) -> None
     plt.yscale("log")
     plt.xlabel("M (log scale)")
     plt.ylabel("Time (s, log scale)")
-    plt.title(f"Benchmark Comparison Across Event Loops ({name})")
+    plt.title(f"Benchmark Comparison Across Event Loops ({name}. Less is better)")
     plt.legend()
     plt.grid(True, which="both", linestyle="--", linewidth=0.5)
     plt.tight_layout()
