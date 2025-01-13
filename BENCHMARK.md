@@ -1,7 +1,5 @@
 # Leviathan Benchmarking Results
 
-## Introduction
-
 This page presents the benchmarking results for Leviathan, showcasing its performance and efficiency compared to other event loops. The tests compare the implementation of the asyncio standard event loop, uvloop, Leviathan (single thread mode) and Leviathan (thread-safe).
 
 ### Test Environment
@@ -187,7 +185,7 @@ For more information, refer to the [code repository](benchmarks/event_fiesta_fac
 +-------------------------+---------+--------------+-----------+----------------+
 ```
 
-![Memory Usage Test Results](benchmark_results/event_fiesta_factory.py)
+![Memory Usage Test Results](benchmark_results/event_fiesta_factory.png)
 
 ---
 

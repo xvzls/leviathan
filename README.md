@@ -44,9 +44,9 @@ finally:
 
 Leviathan stands out for its speed and performance. Here is a preliminary chart illustrating its superiority over other event loops:
 
-![Performance Benchmark](https://placeholder.url/benchmark-image)
+![Performance Benchmark](benchmark_results/chat.png)
 
-For more information and additional tests, check the following file: [More benchmarks and details](https://placeholder.url/benchmark-details.md).
+For more information and additional tests, check the following file: [More benchmarks and details](BENCHMARK.md).
 
 ---
 
