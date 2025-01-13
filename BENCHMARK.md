@@ -9,6 +9,13 @@ This page presents the benchmarking results for Leviathan, showcasing its perfor
 
 ---
 
+### Axis Explanation
+
+In the benchmark charts:
+
+- The **X-axis** represents various metrics, usually the number of events or tasks processed.
+- The **Y-axis** represents the time taken to complete the test. Lower values indicate better performance.
+
 ## Benchmark Tests
 
 ### Test 1: Producer - Consumer
