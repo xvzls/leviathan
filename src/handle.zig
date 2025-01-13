@@ -14,9 +14,10 @@ pub const PythonHandleObject = extern struct {
 };
 
 pub const GenericCallbackData = struct {
-    args: []PyObject,
+    args: ?[]PyObject,
     exception_handler: PyObject,
     py_callback: PyObject,
+    py_context: PyObject,
     py_handle: *PythonHandleObject,
     cancelled: *bool,
     can_release: bool = true
@@ -25,8 +26,10 @@ pub const GenericCallbackData = struct {
 pub inline fn release_python_generic_callback(allocator: std.mem.Allocator, data: GenericCallbackData) void {
     if (!data.can_release) return;
 
-    for (data.args) |arg| python_c.py_decref(arg);
-    allocator.free(data.args);
+    if (data.args) |args| {
+        for (args) |arg| python_c.py_decref(arg);
+        allocator.free(args);
+    }
 
     python_c.py_decref(data.py_callback);
     python_c.py_decref(@ptrCast(data.py_handle));
@@ -47,9 +50,26 @@ pub fn callback_for_python_generic_callbacks(
         }
     }
 
-    const result: ?PyObject = python_c.PyObject_Vectorcall(
-        data.py_callback, data.args.ptr, @intCast(data.args.len), null
-    );
+    const py_context = data.py_context;
+    if (python_c.PyContext_Enter(py_context) < 0) {
+        return .Exception;
+    }
+
+    const result: ?PyObject = blk: {
+        if (data.args) |args| {
+            break :blk python_c.PyObject_Vectorcall(
+                data.py_callback, args.ptr, @intCast(args.len), null
+            );
+        }else{
+            break :blk python_c.PyObject_CallNoArgs(data.py_callback);
+        }
+    };
+
+    if (python_c.PyContext_Exit(py_context) < 0) {
+        python_c.py_xdecref(result);
+        return .Exception;
+    }
+
     if (result) |value| {
         python_c.py_decref(value);
     }else{
@@ -71,7 +91,7 @@ pub fn callback_for_python_generic_callbacks(
         var args: [4]?PyObject = undefined;
         args[0] = exception;
         args[1] = exc_message;
-        args[2] = data.args[0];
+        args[2] = data.py_callback;
         args[3] = @ptrCast(data.py_handle);
 
         const message_kname: PyObject = python_c.PyUnicode_FromString("message\x00")

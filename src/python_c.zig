@@ -3,6 +3,18 @@ pub usingnamespace @cImport({
     @cInclude("Python.h");
 });
 
+pub inline fn get_type(obj: *Python.PyObject) *Python.PyTypeObject {
+    return obj.ob_type orelse unreachable;
+}
+
+pub inline fn is_type(obj: *Python.PyObject, @"type": *Python.PyTypeObject) bool {
+    return get_type(obj) == @"type";
+}
+
+pub inline fn type_check(obj: *Python.PyObject, @"type": *Python.PyTypeObject) bool {
+    return is_type(obj, @"type") or Python.PyType_IsSubtype(get_type(obj), @"type") != 0;
+}
+
 pub inline fn get_py_true() *Python.PyObject {
     const py_true_struct: *Python.PyObject = @ptrCast(&Python._Py_TrueStruct);
     Python.py_incref(py_true_struct);

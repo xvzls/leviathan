@@ -33,7 +33,7 @@ inline fn append_new_task(
         orelse return error.PythonError;
     errdefer python_c.py_decref(aclose);
 
-    const context: PyObject = python_c.PyObject_CallNoArgs(self.contextvars_copy.?)
+    const context: PyObject = python_c.PyContext_CopyCurrent()
         orelse return error.PythonError;
     errdefer python_c.py_decref(context);
 

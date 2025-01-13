@@ -33,7 +33,6 @@ pub fn prune_callbacks_sets(
     var queue_len = queue.len;
     const max_number_of_callbacks_set = max_number_of_callbacks_set_ptr.*;
     if (queue_len <= max_number_of_callbacks_set) return;
-    // std.log.info("LOL", .{});
 
     if (max_number_of_callbacks_set == 1) {
         var node = queue.last.?;

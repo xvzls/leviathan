@@ -36,26 +36,30 @@ inline fn z_loop_add_signal_handler(
         return error.PythonError;
     }
 
-    const context: PyObject = python_c.PyObject_CallNoArgs(self.contextvars_copy.?)
+    const context: PyObject = python_c.PyContext_CopyCurrent()
         orelse return error.PythonError;
     errdefer python_c.py_decref(context);
 
     const allocator = loop_data.allocator;
-
-    const callback_info = try Scheduling.get_callback_info(allocator, args[1..]);
+    const callback_info = try Scheduling.get_callback_info(allocator, args[2..]);
     errdefer {
-        for (callback_info) |arg| {
-            python_c.py_decref(@ptrCast(arg));
+        if (callback_info) |_args| {
+            for (_args) |arg| {
+                python_c.py_decref(@ptrCast(arg));
+            }
+            allocator.free(_args);
         }
-        allocator.free(callback_info);
     }
-
-    const contextvars_run_func: PyObject = python_c.PyObject_GetAttrString(context, "run\x00")
-        orelse return error.PythonError;
-    errdefer python_c.py_decref(contextvars_run_func);
-
     const py_handle: *Handle.PythonHandleObject = try Handle.fast_new_handle(context);
     errdefer python_c.py_decref(@ptrCast(py_handle));
+
+    const py_callback = python_c.py_newref(args[1].?);
+    errdefer python_c.py_decref(py_callback);
+
+    if (python_c.PyCallable_Check(py_callback) < 0) {
+        utils.put_python_runtime_error_message("Invalid callback\x00");
+        return error.PythonError;
+    }
 
     const mutex = &loop_data.mutex;
     mutex.lock();
@@ -74,7 +78,8 @@ inline fn z_loop_add_signal_handler(
         .PythonGeneric = .{
             .args = callback_info,
             .exception_handler = self.exception_handler.?,
-            .py_callback = contextvars_run_func,
+            .py_callback = py_callback,
+            .py_context = context,
             .py_handle = py_handle,
             .cancelled = &py_handle.cancelled,
             .can_release = false

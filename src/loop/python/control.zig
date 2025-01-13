@@ -99,13 +99,6 @@ pub fn loop_is_closed(self: ?*LoopObject, _: ?PyObject) callconv(.C) ?PyObject {
 
 pub fn loop_close(self: ?*LoopObject, _: ?PyObject) callconv(.C) ?PyObject {
     const instance = self.?;
-    const clear_func: PyObject = python_c.PyObject_GetAttrString(instance.scheduled_tasks.?, "clear\x00")
-        orelse return null;
-    defer python_c.py_decref(clear_func);
-
-    const ret: PyObject = python_c.PyObject_CallNoArgs(clear_func)
-        orelse return null;
-    python_c.py_decref(ret);
 
     const loop_data = utils.get_data_ptr(Loop, instance);
 

@@ -59,10 +59,6 @@ inline fn z_loop_new(
         orelse return error.PythonError;
     defer python_c.py_decref(asyncion_tasks_modules);
 
-    const scheduled_tasks: PyObject = python_c.PyObject_GetAttrString(asyncion_tasks_modules, "_scheduled_tasks\x00")
-        orelse return error.PythonError;
-    errdefer python_c.py_decref(scheduled_tasks);
-
     const sys_module: PyObject = python_c.PyImport_ImportModule("sys\x00")
         orelse return error.PythonError;
     errdefer python_c.py_decref(sys_module);
@@ -113,10 +109,6 @@ inline fn z_loop_new(
     instance.leave_task_func = leave_task_func;
     instance.register_task_func = register_task_func;
     instance.unregister_task_func = unregister_task_func;
-    instance.scheduled_tasks = scheduled_tasks;
-
-    instance.contextvars_module = contextvars_module;
-    instance.contextvars_copy = contextvars_copy;
 
     instance.asyncgens_set = weakref_set;
     instance.asyncgens_set_add = weakref_add;
@@ -158,8 +150,6 @@ pub fn loop_clear(self: ?*LoopObject) callconv(.C) c_int {
     python_c.py_decref_and_set_null(&py_loop.leave_task_func);
 
     python_c.py_decref_and_set_null(&py_loop.exception_handler);
-    python_c.py_decref_and_set_null(&py_loop.contextvars_module);
-    python_c.py_decref_and_set_null(&py_loop.contextvars_copy);
 
     python_c.py_decref_and_set_null(&py_loop.asyncgens_set);
     python_c.py_decref_and_set_null(&py_loop.asyncgens_set_add);
@@ -184,8 +174,6 @@ pub fn loop_traverse(self: ?*LoopObject, visit: python_c.visitproc, arg: ?*anyop
             instance.enter_task_func,
             instance.leave_task_func,
             instance.exception_handler,
-            instance.contextvars_module,
-            instance.contextvars_copy,
             instance.asyncgens_set,
             instance.asyncgens_set_add,
             instance.asyncgens_set_discard,

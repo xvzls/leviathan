@@ -13,7 +13,11 @@ const LoopObject = Loop.Python.LoopObject;
 const std = @import("std");
 const builtin = @import("builtin");
 
-pub inline fn get_callback_info(allocator: std.mem.Allocator, args: []?PyObject) ![]PyObject {
+pub inline fn get_callback_info(allocator: std.mem.Allocator, args: []?PyObject) !?[]PyObject {
+    if (args.len == 0) {
+        return null;
+    }
+
     const callback_info = try allocator.alloc(PyObject, args.len);
     errdefer allocator.free(callback_info);
 
@@ -52,34 +56,45 @@ inline fn z_loop_call_soon(
 
     if (context) |py_ctx| {
         if (python_c.is_none(py_ctx)) {
-            context = python_c.PyObject_CallNoArgs(self.contextvars_copy.?)
+            context = python_c.PyContext_CopyCurrent()
                 orelse return error.PythonError;
             python_c.py_decref(py_ctx);
-        }else{
+        }else if (python_c.is_type(py_ctx, &python_c.PyContext_Type)) {
             python_c.py_incref(py_ctx);
+        }else{
+            python_c.PyErr_SetString(
+                python_c.PyExc_TypeError, "Invalid context\x00"
+            );
+            return error.PythonError;
         }
     }else {
-        context = python_c.PyObject_CallNoArgs(self.contextvars_copy.?) orelse return error.PythonError;
+        context = python_c.PyContext_CopyCurrent() orelse return error.PythonError;
     }
     errdefer python_c.py_decref(context.?);
 
     const loop_data = utils.get_data_ptr(Loop, self);
     const allocator = loop_data.allocator;
 
-    const callback_info = try get_callback_info(allocator, args);
+    const callback_info = try get_callback_info(allocator, args[1..]);
     errdefer {
-        for (callback_info) |arg| {
-            python_c.py_decref(@ptrCast(arg));
+        if (callback_info) |_args| {
+            for (_args) |arg| {
+                python_c.py_decref(@ptrCast(arg));
+            }
+            allocator.free(_args);
         }
-        allocator.free(callback_info);
     }
-
-    const contextvars_run_func: PyObject = python_c.PyObject_GetAttrString(context.?, "run\x00")
-        orelse return error.PythonError;
-    errdefer python_c.py_decref(contextvars_run_func);
 
     const py_handle: *Handle.PythonHandleObject = try Handle.fast_new_handle(context.?);
     errdefer python_c.py_decref(@ptrCast(py_handle));
+
+    const py_callback = python_c.py_newref(args[0].?);
+    errdefer python_c.py_decref(py_callback);
+
+    if (python_c.PyCallable_Check(py_callback) < 0) {
+        utils.put_python_runtime_error_message("Invalid callback\x00");
+        return error.PythonError;
+    }
 
     const mutex = &loop_data.mutex;
     mutex.lock();
@@ -99,7 +114,8 @@ inline fn z_loop_call_soon(
         .PythonGeneric = .{
             .args = callback_info,
             .exception_handler = self.exception_handler.?,
-            .py_callback = contextvars_run_func,
+            .py_callback = py_callback,
+            .py_context = context.?,
             .py_handle = py_handle,
             .cancelled = &py_handle.cancelled
         }
@@ -146,19 +162,21 @@ inline fn z_loop_delayed_call(
     );
 
     if (context == null) {
-        context = python_c.PyObject_CallNoArgs(self.contextvars_copy.?) orelse return error.PythonError;
+        context = python_c.PyContext_CopyCurrent() orelse return error.PythonError;
     }
     errdefer python_c.py_decref(context.?);
 
     const loop_data = utils.get_data_ptr(Loop, self);
     const allocator = loop_data.allocator;
 
-    const callback_info = try get_callback_info(allocator, args[1..]);
+    const callback_info = try get_callback_info(allocator, args[2..]);
     errdefer {
-        for (callback_info) |arg| {
-            python_c.py_decref(@ptrCast(arg));
+        if (callback_info) |_args| {
+            for (_args) |arg| {
+                python_c.py_decref(@ptrCast(arg));
+            }
+            allocator.free(_args);
         }
-        allocator.free(callback_info);
     }
 
     const time: std.posix.timespec = blk: {
@@ -182,12 +200,16 @@ inline fn z_loop_delayed_call(
         }
     };
 
-    const contextvars_run_func: PyObject = python_c.PyObject_GetAttrString(context.?, "run\x00")
-        orelse return error.PythonError;
-    errdefer python_c.py_decref(contextvars_run_func);
-
     const py_timer_handle: *TimerHandle.PythonTimerHandleObject = try TimerHandle.fast_new_timer_handle(time, context.?);
     errdefer python_c.py_decref(@ptrCast(py_timer_handle));
+
+    const py_callback = python_c.py_newref(args[1].?);
+    errdefer python_c.py_decref(py_callback);
+
+    if (python_c.PyCallable_Check(py_callback) < 0) {
+        utils.put_python_runtime_error_message("Invalid callback\x00");
+        return error.PythonError;
+    }
 
     const mutex = &loop_data.mutex;
     mutex.lock();
@@ -207,7 +229,8 @@ inline fn z_loop_delayed_call(
         .PythonGeneric = .{
             .args = callback_info,
             .exception_handler = self.exception_handler.?,
-            .py_callback = contextvars_run_func,
+            .py_callback = py_callback,
+            .py_context = context.?,
             .py_handle = @ptrCast(py_timer_handle),
             .cancelled = &py_timer_handle.handle.cancelled
         }

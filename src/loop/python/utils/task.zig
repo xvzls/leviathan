@@ -29,14 +29,17 @@ inline fn z_loop_create_task(
 
     if (context) |py_ctx| {
         if (python_c.is_none(py_ctx)) {
-            context = python_c.PyObject_CallNoArgs(self.contextvars_copy.?)
+            context = python_c.PyContext_CopyCurrent()
                 orelse return error.PythonError;
             python_c.py_decref(py_ctx);
-        }else{
+        }else if (python_c.is_type(py_ctx, &python_c.PyContext_Type)) {
             python_c.py_incref(py_ctx);
+        }else{
+            python_c.PyErr_SetString(python_c.PyExc_TypeError, "Invalid context\x00");
+            return error.PythonError;
         }
     }else {
-        context = python_c.PyObject_CallNoArgs(self.contextvars_copy.?) orelse return error.PythonError;
+        context = python_c.PyContext_CopyCurrent() orelse return error.PythonError;
     }
     errdefer python_c.py_decref(context.?);
 

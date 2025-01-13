@@ -30,45 +30,40 @@ inline fn z_future_add_done_callback(
     const py_loop = self.py_loop.?;
     if (context) |py_ctx| {
         if (python_c.is_none(py_ctx)) {
-            context = python_c.PyObject_CallNoArgs(py_loop.contextvars_copy.?)
+            context = python_c.PyContext_CopyCurrent()
                 orelse return error.PythonError;
-        }else{
+        }else if (python_c.is_type(py_ctx, &python_c.PyContext_Type)) {
             python_c.py_incref(py_ctx);
+        }else{
+            python_c.PyErr_SetString(
+                python_c.PyExc_TypeError, "Invalid context\x00"
+            );
+            return error.PythonError;
         }
     }else {
-        context = python_c.PyObject_CallNoArgs(py_loop.contextvars_copy.?) orelse return error.PythonError;
+        context = python_c.PyContext_CopyCurrent() orelse return error.PythonError;
     }
-    defer python_c.py_decref(context.?);
-
-    const contextvars_run_func: PyObject = python_c.PyObject_GetAttrString(context.?, "run\x00")
-        orelse return error.PythonError;
-    errdefer python_c.py_decref(contextvars_run_func);
+    errdefer python_c.py_decref(context.?);
 
     const future_data = utils.get_data_ptr(Future, self);
     const mutex = &future_data.mutex;
     mutex.lock();
     defer mutex.unlock();
 
-    const allocator = future_data.callbacks_arena_allocator;
-    const callback_args = try allocator.alloc(PyObject, 2);
-    errdefer allocator.free(callback_args);
+    const callback = python_c.py_newref(args[0].?);
+    errdefer python_c.py_decref(callback);
 
-    const callback = args[0].?;
     if (python_c.PyCallable_Check(callback) < 0) {
         utils.put_python_runtime_error_message("Invalid callback\x00");
         return error.PythonError;
     }
 
-    callback_args[0] = python_c.py_newref(callback);
-    errdefer python_c.py_decref(callback);
-
-    callback_args[1] = @ptrCast(self);
-
     var callback_data: CallbackManager.Callback = .{
         .PythonFuture = .{
-            .args = callback_args,
+            .py_future = @ptrCast(self),
+            .py_callback = callback,
+            .py_context = context.?,
             .exception_handler = py_loop.exception_handler.?,
-            .py_callback = contextvars_run_func,
         }
     };
 

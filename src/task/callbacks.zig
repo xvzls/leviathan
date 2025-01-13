@@ -130,7 +130,7 @@ inline fn handle_legacy_future_object(
         future, "_asyncio_future_blocking\x00"
     ) orelse return .Exception;
 
-    if (python_c.PyObject_TypeCheck(asyncio_future_blocking, &python_c.PyBool_Type) == 0) {
+    if (!python_c.type_check(asyncio_future_blocking, &python_c.PyBool_Type)) {
         return execute_zig_function(
             create_new_py_exception_and_add_event, .{
                 loop_data, allocator, "Task {s} got bad yield: {s}\x00",
@@ -243,7 +243,7 @@ inline fn handle_leviathan_future_object(
 inline fn successfully_execution(
     task: *Task.PythonTaskObject, loop_data: *Loop, result: PyObject
 ) CallbackManager.ExecuteCallbacksReturn {
-    if (python_c.PyObject_TypeCheck(result, &Future.Python.FutureType) != 0) {
+    if (python_c.type_check(result, &Future.Python.FutureType)) {
         return handle_leviathan_future_object(task, @ptrCast(result), loop_data);
     }else if (python_c.is_none(result)) {
         const callback: CallbackManager.Callback = .{
@@ -274,29 +274,6 @@ inline fn failed_execution(
     const future_data = utils.get_data_ptr(Future, fut);
     const exception: PyObject = python_c.PyErr_GetRaisedException() orelse return .Exception;
     defer python_c.py_decref(exception);
-
-    // const ret: PyObject = python_c.PyObject_CallOneArg(
-    //     py_loop.unregister_task_func.?, @ptrCast(task)
-    // ) orelse return .Exception;
-    // python_c.py_decref(ret);
-
-    if (exc_match(exception, python_c.PyExc_StopIteration) > 0) {
-        if (task.must_cancel) {
-            if (!Future.Python.Cancel.future_fast_cancel(fut, fut.cancel_msg_py_object)) {
-                return .Exception;
-            }
-        }else{
-            const value: PyObject = python_c.PyObject_GetAttrString(exception, "value\x00")
-                orelse return .Exception;
-            defer python_c.py_decref(value);
-
-            return execute_zig_function(
-                Future.Python.Result.future_fast_set_result, .{future_data, value}
-            );
-        }
-
-        return .Continue;
-    }
 
     const cancelled_error = py_loop.cancelled_error_exc.?;
     if (exc_match(exception, cancelled_error) > 0) {
@@ -382,7 +359,7 @@ pub fn step_run_and_handle_result(
     if (task.must_cancel) {
         if (
             exception_value == null or
-            python_c.PyObject_TypeCheck(exception_value.?, python_c.Py_TYPE(task.fut.cancelled_error_exc.?)) == 0
+            python_c.type_check(exception_value.?, python_c.get_type(task.fut.cancelled_error_exc.?))
         ) {
             python_c.py_xdecref(exception_value);
             exception_value = blk: {
@@ -398,22 +375,12 @@ pub fn step_run_and_handle_result(
         task.must_cancel = false;
     }
 
-    const run_context = task.run_context.?;
-    var args: [2]?PyObject = undefined;
     const enter_task_args: [2]?PyObject = .{
         @ptrCast(py_loop), @ptrCast(task)
     };
 
     const py_none = python_c.get_py_none();
     defer python_c.py_decref(py_none);
-
-    if (exception_value) |value| {
-        args[0] = task.coro_throw.?;
-        args[1] = value;
-    }else{
-        args[0] = task.coro_send.?;
-        args[1] = py_none;
-    }
 
     var ret: PyObject = python_c.PyObject_Vectorcall(py_loop.enter_task_func.?, &enter_task_args, enter_task_args.len, null)
         orelse return .Exception;
@@ -423,12 +390,51 @@ pub fn step_run_and_handle_result(
         mutex.unlock();
         defer mutex.lock();
 
-        const coro_ret: ?PyObject = python_c.PyObject_Vectorcall(run_context, &args, args.len, null);
-        if (coro_ret) |result| {
-            defer python_c.py_decref(result);
-            break :blk successfully_execution(task, loop_data, result);
+        const context = task.py_context.?;
+        if (python_c.PyContext_Enter(context) < 0) {
+            return .Exception;
         }
-        break :blk failed_execution(task, py_loop);
+
+        var coro_ret: ?PyObject = null;
+        const gen_ret: python_c.PySendResult = blk2: {
+            if (exception_value) |value| {
+                if (python_c.PyObject_CallOneArg(task.coro_throw.?, value)) |v| {
+                    coro_ret = v;
+                    break :blk2 python_c.PYGEN_RETURN;
+                }
+                break :blk2 python_c.PYGEN_ERROR;
+            }else{
+                break :blk2 python_c.PyIter_Send(task.coro.?, py_none, &coro_ret);
+            }
+        };
+
+        if (python_c.PyContext_Exit(context) < 0) {
+            python_c.py_xdecref(coro_ret);
+            return .Exception;
+        }
+
+        switch (gen_ret) {
+            python_c.PYGEN_RETURN => {
+                if (task.must_cancel) {
+                    if (!Future.Python.Cancel.future_fast_cancel(&task.fut, task.fut.cancel_msg_py_object)) {
+                        break :blk .Exception;
+                    }
+                    break :blk .Continue;
+                }else{
+                    break :blk execute_zig_function(
+                               Future.Python.Result.future_fast_set_result, .{future_data, coro_ret.?}
+                           );
+                }
+            },
+            python_c.PYGEN_ERROR => break :blk failed_execution(task, py_loop),
+            else => {
+                if (coro_ret) |result| {
+                    defer python_c.py_decref(result);
+                    break :blk successfully_execution(task, loop_data, result);
+                }
+                break :blk failed_execution(task, py_loop);
+            }
+        }
     };
 
     ret = python_c.PyObject_Vectorcall(py_loop.leave_task_func.?, &enter_task_args, enter_task_args.len, null)
@@ -457,7 +463,7 @@ fn wakeup_task(
 
     defer python_c.py_decref(py_future);
 
-    if (python_c.PyObject_TypeCheck(py_future, &Future.Python.FutureType) != 0) {
+    if (python_c.type_check(py_future, &Future.Python.FutureType)) {
         const leviathan_fut: *Future.Python.FutureObject = @alignCast(@ptrCast(py_future));
         if (leviathan_fut.exception) |exception| {
             exc_value = python_c.py_newref(exception);

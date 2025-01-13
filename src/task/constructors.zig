@@ -16,7 +16,6 @@ const builtin = @import("builtin");
 
 inline fn task_set_initial_values(self: *PythonTaskObject) void {
     Future.Python.Constructors.future_set_initial_values(&self.fut);
-    self.run_context = null;
     self.py_context = null;
     self.coro = null;
     self.name = null;
@@ -46,27 +45,21 @@ inline fn task_init_configuration(
         }
     }
 
-    const coro_send: PyObject = python_c.PyObject_GetAttrString(coro, "send\x00") orelse return error.PythonError;
-    errdefer python_c.py_decref(coro_send);
-
     const coro_throw: PyObject = python_c.PyObject_GetAttrString(coro, "throw\x00") orelse return error.PythonError;
     errdefer python_c.py_decref(coro_throw);
 
     self.name = name;
 
-    self.run_context = python_c.PyObject_GetAttrString(context, "run\x00") orelse return error.PythonError;
-
     self.coro = coro;
-    self.coro_send = coro_send;
     self.coro_throw = coro_throw;
 
     self.py_context = context;
 }
 
 inline fn task_schedule_coro(self: *PythonTaskObject, loop: *LoopObject) !void {
-    // const ret: PyObject = python_c.PyObject_CallOneArg(loop.register_task_func.?, @ptrCast(self))
-    //     orelse return error.PythonError;
-    // python_c.py_decref(ret);
+    const ret: PyObject = python_c.PyObject_CallOneArg(loop.register_task_func.?, @ptrCast(self))
+        orelse return error.PythonError;
+    python_c.py_decref(ret);
 
     const loop_data = utils.get_data_ptr(Loop, loop);
 
@@ -136,17 +129,15 @@ pub fn task_clear(self: ?*PythonTaskObject) callconv(.C) c_int {
     python_c.py_decref_and_set_null(&fut.cancel_msg_py_object);
 
     python_c.py_decref_and_set_null(&py_task.py_context);
-    python_c.py_decref_and_set_null(&py_task.run_context);
     python_c.py_decref_and_set_null(&py_task.name);
 
     python_c.py_decref_and_set_null(&py_task.coro);
-    python_c.py_decref_and_set_null(&py_task.coro_send);
     python_c.py_decref_and_set_null(&py_task.coro_throw);
 
     python_c.py_decref_and_set_null(&py_task.fut_waiter);
 
-    if (py_task.weakref_list) |list| {
-        python_c.PyObject_ClearWeakRefs(list);
+    if (py_task.weakref_list != null) {
+        python_c.PyObject_ClearWeakRefs(@ptrCast(py_task));
         py_task.weakref_list = null;
     }
 
@@ -168,7 +159,6 @@ pub fn task_traverse(self: ?*PythonTaskObject, visit: python_c.visitproc, arg: ?
             instance.py_context,
             instance.name,
             instance.coro,
-            instance.coro_send,
             instance.coro_throw
         }, visit, arg
     );
@@ -207,22 +197,27 @@ inline fn z_task_init(
     }
 
     const leviathan_loop: *LoopObject = @ptrCast(py_loop.?);
-    if (python_c.PyObject_TypeCheck(@ptrCast(leviathan_loop), &Loop.Python.LoopType) == 0) {
+    if (!python_c.type_check(@ptrCast(leviathan_loop), &Loop.Python.LoopType)) {
         python_c.PyErr_SetString(
             python_c.PyExc_TypeError, "Invalid asyncio event loop. Only Leviathan's event loops are allowed\x00"
         );
         return error.PythonError;
     }
 
-    if (context) |*py_ctx| {
-        if (python_c.is_none(py_ctx.*)) {
-            py_ctx.* = python_c.PyObject_CallNoArgs(leviathan_loop.contextvars_copy.?)
+    if (context) |py_ctx| {
+        if (python_c.is_none(py_ctx)) {
+            context = python_c.PyContext_CopyCurrent()
                 orelse return error.PythonError;
+        }else if (python_c.is_type(py_ctx, &python_c.PyContext_Type)) {
+            python_c.py_incref(py_ctx);
         }else{
-            python_c.py_incref(py_ctx.*);
+            python_c.PyErr_SetString(
+                python_c.PyExc_TypeError, "Invalid context\x00"
+            );
+            return error.PythonError;
         }
     }else{
-        context = python_c.PyObject_CallNoArgs(leviathan_loop.contextvars_copy.?) orelse return error.PythonError;
+        context = python_c.PyContext_CopyCurrent() orelse return error.PythonError;
     }
     errdefer python_c.py_decref(context.?);
 

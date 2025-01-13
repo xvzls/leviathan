@@ -18,27 +18,39 @@ pub const CallbacksSetData = struct {
 };
 
 pub const Data = struct {
-    args: []PyObject,
-    exception_handler: PyObject,
+    py_future: PyObject,
     py_callback: PyObject,
+    py_context: PyObject,
+    exception_handler: PyObject,
     can_execute: bool = true,
     dec_future: bool = false
 };
 
 pub inline fn release_python_future_callback(data: Data) void {
     python_c.py_decref(data.py_callback);
-    python_c.py_decref(data.args[0]);
-    if (data.dec_future) python_c.py_decref(data.args[1]);
+    python_c.py_decref(data.py_context);
+    if (data.dec_future) python_c.py_decref(data.py_future);
 }
 
 pub fn callback_for_python_future_callbacks(data: Data) CallbackManager.ExecuteCallbacksReturn {
     defer release_python_future_callback(data);
     if (!data.can_execute) return .Continue;
 
-    const args = data.args;
+    const py_future = data.py_future;
     const py_callback = data.py_callback;
+    const py_context = data.py_context;
 
-    const result: ?PyObject = python_c.PyObject_Vectorcall(py_callback, args.ptr, args.len, null);
+    if (python_c.PyContext_Enter(py_context) < 0) {
+        return .Exception;
+    }
+
+    const result: ?PyObject = python_c.PyObject_CallOneArg(py_callback, py_future);
+
+    if (python_c.PyContext_Exit(py_context) < 0) {
+        python_c.py_xdecref(result);
+        return .Exception;
+    }
+
     if (result) |value| {
         python_c.py_decref(value);
     }else{
@@ -53,15 +65,15 @@ pub fn callback_for_python_future_callbacks(data: Data) CallbackManager.ExecuteC
             orelse return .Exception;
         defer python_c.py_decref(exception);
 
-        const exc_message: PyObject = python_c.PyUnicode_FromString("Exception ocurred executing callback\x00")
+        const exc_message: PyObject = python_c.PyUnicode_FromString("Exception ocurred executing future done callback\x00")
             orelse return .Exception;
         defer python_c.py_decref(exc_message);
 
         var exc_args: [4]?PyObject = undefined;
         exc_args[0] = exception;
         exc_args[1] = exc_message;
-        exc_args[2] = data.args[0];
-        exc_args[3] = @ptrCast(args[1]);
+        exc_args[2] = py_callback;
+        exc_args[3] = py_future;
 
         const message_kname: PyObject = python_c.PyUnicode_FromString("message\x00")
             orelse return .Exception;
@@ -141,7 +153,7 @@ pub fn remove_done_callback(self: *Future, callback_id: u64) usize {
                     }
                 },
                 .PythonFuture => {
-                    if (@as(u64, @intFromPtr(callback.PythonFuture.args[0])) == callback_id) {
+                    if (@as(u64, @intFromPtr(callback.PythonFuture.py_callback)) == callback_id) {
                         callback.PythonFuture.can_execute = false;
                         removed_count += 1;
                     }

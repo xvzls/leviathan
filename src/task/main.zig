@@ -111,11 +111,9 @@ pub const PythonTaskObject = extern struct {
     fut: Future.Python.FutureObject,
 
     py_context: ?PyObject,
-    run_context: ?PyObject,
     name: ?PyObject,
 
     coro: ?PyObject,
-    coro_send: ?PyObject,
     coro_throw: ?PyObject,
 
     fut_waiter: ?PyObject,

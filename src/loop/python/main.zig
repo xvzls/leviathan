@@ -142,10 +142,7 @@ pub const LoopObject = extern struct {
     leave_task_func: ?PyObject,
     register_task_func: ?PyObject,
     unregister_task_func: ?PyObject,
-    scheduled_tasks: ?PyObject,
 
-    contextvars_module: ?PyObject,
-    contextvars_copy: ?PyObject,
     exception_handler: ?PyObject,
 
     asyncgens_set: ?PyObject,
