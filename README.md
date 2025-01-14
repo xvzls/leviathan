@@ -16,7 +16,7 @@ From the depths of the sea, where darkness meets vastness, emerges Leviathan: an
 
 ## 🔧 Installation
 
-To install Leviathan, you can use pip:
+To install Leviathan, just execute:
 
 ```bash
 python setup.py install
