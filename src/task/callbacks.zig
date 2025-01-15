@@ -359,7 +359,7 @@ pub fn step_run_and_handle_result(
     if (task.must_cancel) {
         if (
             exception_value == null or
-            python_c.type_check(exception_value.?, python_c.get_type(task.fut.cancelled_error_exc.?))
+            python_c.PyErr_GivenExceptionMatches(exception_value.?, task.fut.cancelled_error_exc.?) > 0
         ) {
             python_c.py_xdecref(exception_value);
             exception_value = blk: {
