@@ -55,6 +55,11 @@ unstable.python313Packages.buildPythonPackage {
 		# Python
 		(unstable.python313.withPackages (py: [
 			py.pytest
+			py.prettytable
+			py.uvloop
+			py.matplotlib
+			py.pyqt5
+			py.pyside6
 		]))
 		unstable.python312Packages.pylsp-mypy
 	];
