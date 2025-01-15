@@ -4,7 +4,7 @@ from prettytable import PrettyTable
 import dataclasses
 import uvloop, asyncio, time, leviathan
 import matplotlib.pyplot as plt
-import os, statistics
+import sys, os, statistics
 import matplotlib
 import statistics
 
@@ -28,7 +28,14 @@ from benchmarks.food_delivery import (
     BENCHMARK_NAME as benchmark5_name,
 )
 
-os.nice(-20)
+try:
+    os.nice(-20)
+except IOError as e:
+    print(
+        f"({e}):",
+        "Couldn't set nice, running with default level",
+        file=sys.stderr,
+    )
 
 BENCHMARK_FUNCTIONS: List[
     Tuple[Callable[[asyncio.AbstractEventLoop, int], None], str]
