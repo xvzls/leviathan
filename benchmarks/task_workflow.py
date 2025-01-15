@@ -14,7 +14,7 @@ def future_callback(fut: asyncio.Future[str]) -> None:
         loop.create_task(subtask(sub_task_id))
 
 async def consumer(fut: asyncio.Future[str], cid: int) -> None:
-    await asyncio.sleep(0.2)
+    await asyncio.sleep(0.1)
     fut.set_result(f"Consumer_{cid}")
 
 async def main_task(tid: int) -> None:
@@ -32,7 +32,6 @@ async def main(num_tasks: int) -> None:
     tasks = [asyncio.create_task(main_task(i)) for i in range(num_tasks)]
     
     await asyncio.gather(*tasks)
-    await asyncio.sleep(1)
 
 
 def run(loop: asyncio.AbstractEventLoop, num_producers: int) -> None:
