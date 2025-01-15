@@ -53,7 +53,9 @@ unstable.python313Packages.buildPythonPackage {
 		pkgs.zon2nix
 		
 		# Python
-		unstable.python313
+		(unstable.python313.withPackages (py: [
+			py.pytest
+		]))
 		unstable.python312Packages.pylsp-mypy
 	];
 	
@@ -61,6 +63,18 @@ unstable.python313Packages.buildPythonPackage {
 		# Python
 		unstable.python313
 	];
+	
+	checkInputs = [
+		unstable.python313Packages.pytestCheckHook
+	];
+	
+	doCheck = true;
+	
+	pytestCheckPhase = ''
+		cd build/lib/
+		python -m pytest -s
+		cd
+	'';
 	
 	patchPhase = ''
 		export HOME=$TMPDIR
