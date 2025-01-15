@@ -11,7 +11,7 @@ inline fn raise_cancel_exception(self: *PythonFutureObject) void {
     if (self.cancel_msg_py_object) |cancel_msg_py_object| {
         python_c.PyErr_SetObject(self.cancelled_error_exc.?, cancel_msg_py_object);
     }else{
-        python_c.PyErr_SetRaisedException(self.cancelled_error_exc.?);
+        python_c.PyErr_SetNone(self.cancelled_error_exc.?);
     }
 }
 
