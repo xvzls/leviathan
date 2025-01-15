@@ -310,3 +310,84 @@ def test_future_await(
         assert result == 42
     finally:
         loop.close()
+
+
+@pytest.mark.parametrize("fut_obj, loop_obj", [
+    (Future, Loop),
+    (ThreadSafeFuture, ThreadSafeLoop),
+])
+def test_future_cancel_during_callback(
+    fut_obj: Type[asyncio.Future[Any]], loop_obj: Type[asyncio.AbstractEventLoop]
+) -> None:
+    def callback(fut: asyncio.Future[Any]) -> None:
+        fut.cancel()
+
+    loop = loop_obj()
+    try:
+        future = fut_obj(loop=loop)
+        future.add_done_callback(callback)
+        future.set_result("Done")
+        
+        loop.run_until_complete(future)
+        assert not future.cancelled()
+    finally:
+        loop.close()
+
+@pytest.mark.parametrize("fut_obj, loop_obj", [
+    (Future, Loop),
+    (ThreadSafeFuture, ThreadSafeLoop),
+])
+def test_future_remove_done_callback(
+    fut_obj: Type[asyncio.Future[Any]], loop_obj: Type[asyncio.AbstractEventLoop]
+) -> None:
+    loop = loop_obj()
+    try:
+        future = fut_obj(loop=loop)
+        mock_callback = MagicMock()
+        future.add_done_callback(mock_callback)
+        future.remove_done_callback(mock_callback)
+        future.set_result("Done")
+        
+        loop.run_until_complete(future)
+        mock_callback.assert_not_called()
+    finally:
+        loop.close()
+
+@pytest.mark.parametrize("fut_obj, loop_obj", [
+    (Future, Loop),
+    (ThreadSafeFuture, ThreadSafeLoop),
+])
+def test_future_callbacks_exception_handling(
+    fut_obj: Type[asyncio.Future[Any]], loop_obj: Type[asyncio.AbstractEventLoop]
+) -> None:
+    def callback_with_exception(_: asyncio.Future[Any]) -> None:
+        raise ValueError("Callback exception")
+
+    loop = loop_obj()
+    try:
+        future = fut_obj(loop=loop)
+        future.add_done_callback(callback_with_exception)
+        
+        future.set_result("Done")
+        loop.run_until_complete(future)
+    finally:
+        loop.close()
+
+@pytest.mark.parametrize("fut_obj, loop_obj", [
+    (Future, Loop),
+    (ThreadSafeFuture, ThreadSafeLoop),
+])
+def test_future_set_result_after_done(
+    fut_obj: Type[asyncio.Future[Any]], loop_obj: Type[asyncio.AbstractEventLoop]
+) -> None:
+    loop = loop_obj()
+    try:
+        future = fut_obj(loop=loop)
+        future.set_result("First")
+        
+        with pytest.raises(asyncio.InvalidStateError):
+            future.set_result("Second")
+        
+        assert future.result() == "First"
+    finally:
+        loop.close()
