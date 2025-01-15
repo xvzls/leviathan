@@ -24,7 +24,8 @@ class LeviathanTest(Command):
 
 		self.run_command("build_ext")
 
-		errno = subprocess.call([sys.executable, "-m", "pytest", "-s"])
+		build_lib_path = os.path.join("build", "lib")
+		errno = subprocess.call([sys.executable, "-m", "pytest", "-s"], cwd=build_lib_path)
 		raise SystemExit(errno)
 
 
@@ -43,6 +44,9 @@ class ZigBuildCommand(build_ext):
 		dest_path2 = os.path.join("build", "lib", "leviathan", "leviathan_zig_single_thread.so")
 		shutil.copyfile(src_path, dest_path)
 		shutil.copyfile(src_path2, dest_path2)
+
+		test_dest_path = os.path.join("build", "lib", "tests")
+		shutil.copytree("./tests", test_dest_path)
 
 		st = os.stat(dest_path)
 		os.chmod(dest_path, st.st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
