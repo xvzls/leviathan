@@ -4,6 +4,7 @@ from prettytable import PrettyTable
 import dataclasses
 import uvloop, asyncio, time, leviathan
 import matplotlib.pyplot as plt
+import os, statistics
 import matplotlib
 import statistics
 
@@ -27,6 +28,8 @@ from benchmarks.food_delivery import (
     BENCHMARK_NAME as benchmark5_name,
 )
 
+os.nice(-20)
+
 BENCHMARK_FUNCTIONS: List[
     Tuple[Callable[[asyncio.AbstractEventLoop, int], None], str]
 ] = [
@@ -38,7 +41,7 @@ BENCHMARK_FUNCTIONS: List[
 ]
 
 N: int = 11
-ITERATIONS = 10
+ITERATIONS = 5
 
 M_INITIAL: int = 1024
 M_MULTIPLIER: int = 2
@@ -89,14 +92,13 @@ def benchmark_with_event_loops(
         loop = loop_creator()
         try:
             while m <= M_INITIAL * (2 ** (N - 1)):
-                elapsed_times: List[float] = []
+                times: list[float] = []
                 for _ in range(ITERATIONS):
                     start: float = time.perf_counter()
                     function(loop, m)
                     end: float = time.perf_counter()
-                    elapsed: float = end - start
-                    elapsed_times.append(elapsed)
-                metrics = TimeMetrics(elapsed_times)
+                    times.append(end - start)
+                metrics = TimeMetrics(times)
                 print(" - ".join((
                     loop_name,
                     str(m),
@@ -107,9 +109,9 @@ def benchmark_with_event_loops(
                     )
                 )))
                 results[loop_name].append((m, metrics))
-
                 m *= M_MULTIPLIER
         finally:
+            loop.run_until_complete(loop.shutdown_asyncgens())
             loop.close()
 
         print("-" * 50)

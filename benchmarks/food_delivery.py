@@ -52,9 +52,7 @@ class FoodDeliverySystem:
                 "rider_assigned": None,
             }
 
-        asyncio.create_task(
-            self.notify_user(order_id, "Order created and pending assignment.")
-        )
+        await self.notify_user(order_id, "Order created and pending assignment.")
 
     async def assign_rider(self, order_id: str, rider_id: str) -> None:
         await asyncio.sleep(0.1)
@@ -70,12 +68,12 @@ class FoodDeliverySystem:
             order["rider_assigned"] = rider_id
             self.riders[rider_id] = False
 
-        asyncio.create_task(
+        await asyncio.gather(
             self.notify_user(
                 order_id, f"Order in progress. Rider '{rider_id}' assigned."
-            )
+            ),
+            self.log_event("assign_rider", order_id, rider_id)
         )
-        asyncio.create_task(self.log_event("assign_rider", order_id, rider_id))
 
     async def order_delivered(self, order_id: str) -> None:
         await asyncio.sleep(0.1)
@@ -89,10 +87,10 @@ class FoodDeliverySystem:
                 self.riders[rider_id] = True
             order["status"] = "delivered"
 
-        asyncio.create_task(
-            self.notify_user(order_id, "Your order has been delivered!")
+        await asyncio.gather(
+            self.notify_user(order_id, "Order delivered!"),
+            self.log_event("order_delivered", order_id, rider_id),
         )
-        asyncio.create_task(self.log_event("order_delivered", order_id, rider_id))
 
     async def update_rider_status(self, rider_id: str, is_available: bool) -> None:
         async with self._lock:
@@ -158,7 +156,7 @@ async def generate_events(num_events: int) -> list[dict[str, Any]]:
 async def main(orders: int) -> None:
     fds = FoodDeliverySystem()
     events = await generate_events(orders)
-    tasks = [asyncio.create_task(fds.handle_event(evt)) for evt in events]
+    tasks = [fds.handle_event(evt) for evt in events]
     await asyncio.gather(*tasks)
 
 def run(loop: asyncio.AbstractEventLoop, num_producers: int) -> None:
