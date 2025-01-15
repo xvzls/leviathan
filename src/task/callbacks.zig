@@ -34,6 +34,22 @@ inline fn set_fut_waiter(
     }
 }
 
+inline fn set_result(
+    task: *Task.PythonTaskObject, future_data: *Future,
+    result: PyObject
+) CallbackManager.ExecuteCallbacksReturn {
+    if (task.must_cancel) {
+        if (!Future.Python.Cancel.future_fast_cancel(&task.fut, task.fut.cancel_msg_py_object)) {
+            return .Exception;
+        }
+        return .Continue;
+    }else{
+        return execute_zig_function(
+            Future.Python.Result.future_fast_set_result, .{future_data, result}
+        );
+    }
+}
+
 fn create_new_py_exception_and_add_event(
     loop: *Loop, allocator: std.mem.Allocator, comptime fmt: []const u8,
     task: *Task.PythonTaskObject,
@@ -275,6 +291,11 @@ inline fn failed_execution(
     const exception: PyObject = python_c.PyErr_GetRaisedException() orelse return .Exception;
     defer python_c.py_decref(exception);
 
+    if (exc_match(exception, python_c.PyExc_StopIteration) > 0) {
+        const stop_iteration: *python_c.PyStopIterationObject = @ptrCast(exception);
+        return set_result(task, future_data, stop_iteration.value orelse unreachable);
+    }
+
     const cancelled_error = py_loop.cancelled_error_exc.?;
     if (exc_match(exception, cancelled_error) > 0) {
         if (!Future.Python.Cancel.future_fast_cancel(fut, null)) {
@@ -400,7 +421,7 @@ pub fn step_run_and_handle_result(
             if (exception_value) |value| {
                 if (python_c.PyObject_CallOneArg(task.coro_throw.?, value)) |v| {
                     coro_ret = v;
-                    break :blk2 python_c.PYGEN_RETURN;
+                    break :blk2 python_c.PYGEN_NEXT;
                 }
                 break :blk2 python_c.PYGEN_ERROR;
             }else{
@@ -413,20 +434,9 @@ pub fn step_run_and_handle_result(
             return .Exception;
         }
 
-        switch (gen_ret) {
-            python_c.PYGEN_RETURN => {
-                if (task.must_cancel) {
-                    if (!Future.Python.Cancel.future_fast_cancel(&task.fut, task.fut.cancel_msg_py_object)) {
-                        break :blk .Exception;
-                    }
-                    break :blk .Continue;
-                }else{
-                    break :blk execute_zig_function(
-                               Future.Python.Result.future_fast_set_result, .{future_data, coro_ret.?}
-                           );
-                }
-            },
-            python_c.PYGEN_ERROR => break :blk failed_execution(task, py_loop),
+        break :blk switch (gen_ret) {
+            python_c.PYGEN_RETURN => set_result(task, future_data, coro_ret.?),
+            python_c.PYGEN_ERROR => failed_execution(task, py_loop),
             else => {
                 if (coro_ret) |result| {
                     defer python_c.py_decref(result);
@@ -434,7 +444,7 @@ pub fn step_run_and_handle_result(
                 }
                 break :blk failed_execution(task, py_loop);
             }
-        }
+        };
     };
 
     ret = python_c.PyObject_Vectorcall(py_loop.leave_task_func.?, &enter_task_args, enter_task_args.len, null)
