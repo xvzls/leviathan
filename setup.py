@@ -39,8 +39,8 @@ class ZigBuildCommand(build_ext):
 		src_path = os.path.join(build_dir, "libleviathan.so")
 		src_path2 = os.path.join(build_dir, "libleviathan_single_thread.so")
 
-		dest_path = os.path.join("leviathan", "leviathan_zig.so")
-		dest_path2 = os.path.join("leviathan", "leviathan_zig_single_thread.so")
+		dest_path = os.path.join("build", "lib", "leviathan", "leviathan_zig.so")
+		dest_path2 = os.path.join("build", "lib", "leviathan", "leviathan_zig_single_thread.so")
 		shutil.copyfile(src_path, dest_path)
 		shutil.copyfile(src_path2, dest_path2)
 
