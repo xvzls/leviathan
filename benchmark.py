@@ -36,7 +36,6 @@ except IOError as e:
         file=sys.stderr,
     )
 
-
 N: int = 11
 ITERATIONS = 5
 
@@ -71,7 +70,6 @@ def benchmark_with_event_loops(
     function: Callable[[asyncio.AbstractEventLoop, int], None],
 ) -> Dict[str, List[Tuple[int, TimeMetrics]]]:
     results: Dict[str, List[Tuple[int, TimeMetrics]]] = {}
-    
     for loop_name, loop_creator in loops:
         results[loop_name] = []
         m: int = M_INITIAL
